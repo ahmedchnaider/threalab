@@ -247,36 +247,6 @@ export function ProductsManager({ products, currency, onSave, onDelete }: Produc
     } catch {}
   };
 
-  // Upload default shared photo (front or back)
-  const handleDefaultPhotoUpload = async (side: Side, e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const dataUrl = await readAsDataURL(file);
-    if (side === 'back') {
-      setEditing((prev) => ({
-        ...prev,
-        photoBack: dataUrl,
-        areaBack: defaultArea(prev.type, 'back', true),
-      }));
-    } else {
-      setEditing((prev) => ({
-        ...prev,
-        photo: dataUrl,
-        area: defaultArea(prev.type, 'front', true),
-      }));
-    }
-    setActiveSide(side);
-    e.target.value = '';
-  };
-
-  const handleRemoveDefaultPhoto = (side: Side) => {
-    if (side === 'back') {
-      setEditing((prev) => ({ ...prev, photoBack: '' }));
-    } else {
-      setEditing((prev) => ({ ...prev, photo: '' }));
-    }
-  };
-
   // Upload color-specific photo (front or back for a particular color)
   const handleColorPhotoUpload = async (
     color: string,
@@ -287,13 +257,19 @@ export function ProductsManager({ products, currency, onSave, onDelete }: Produc
     if (!file) return;
     const dataUrl = await readAsDataURL(file);
     const key = cpKey(color, side);
-    setEditing((prev) => ({
-      ...prev,
-      colorPhotos: {
+    setEditing((prev) => {
+      const nextPhotos = {
         ...(prev.colorPhotos || {}),
         [key]: dataUrl,
-      },
-    }));
+      };
+      const isFirst = prev.colors[0] === color;
+      return {
+        ...prev,
+        photo: side === 'front' && (isFirst || !prev.photo) ? dataUrl : prev.photo,
+        photoBack: side === 'back' && (isFirst || !prev.photoBack) ? dataUrl : prev.photoBack,
+        colorPhotos: nextPhotos,
+      };
+    });
     setActiveColor(color);
     setActiveSide(side);
     e.target.value = '';
@@ -304,8 +280,21 @@ export function ProductsManager({ products, currency, onSave, onDelete }: Produc
     setEditing((prev) => {
       const next = { ...(prev.colorPhotos || {}) };
       delete next[key];
+      const isFirst = prev.colors[0] === color;
+      let nextPhoto = prev.photo;
+      let nextPhotoBack = prev.photoBack;
+      if (side === 'front' && isFirst) {
+        const remaining = Object.entries(next).find(([k]) => k.endsWith('-front'));
+        nextPhoto = remaining ? remaining[1] : '';
+      }
+      if (side === 'back' && isFirst) {
+        const remaining = Object.entries(next).find(([k]) => k.endsWith('-back'));
+        nextPhotoBack = remaining ? remaining[1] : '';
+      }
       return {
         ...prev,
+        photo: nextPhoto,
+        photoBack: nextPhotoBack,
         colorPhotos: next,
       };
     });
@@ -453,141 +442,21 @@ export function ProductsManager({ products, currency, onSave, onDelete }: Produc
             </label>
           </div>
 
-          {/* 2. Primary / Default Product Images */}
-          <div className="border-[1.5px] border-[#141414] rounded-xl p-4 bg-white space-y-3">
-            <div className="flex justify-between items-baseline">
-              <h5 className="font-anton text-base tracking-wide uppercase text-[#141414] flex items-center gap-2">
-                <ImageIcon className="w-4 h-4 text-[#ff4d1c]" />
-                <span>Primary Garment Photos</span>
-              </h5>
-              <span className="text-[11px] text-[#6b665d]">Default store & studio images</span>
-            </div>
-            <p className="text-xs text-[#6b665d]">
-              Upload default front & back photos for this garment. If a color variation doesn't have its own custom photo, it falls back to these images.
-            </p>
-
-            <div className={`grid grid-cols-1 ${editing.hasBack ? 'sm:grid-cols-2' : ''} gap-3 pt-1`}>
-              {/* Front Image Box */}
-              <div className="border border-[#ddd6c8] rounded-xl p-3 bg-[#faf8f4] flex flex-col items-center justify-between min-h-[170px] relative">
-                <div className="w-full flex justify-between items-center mb-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-[#141414] flex items-center gap-1.5">
-                    Front Photo
-                    {editing.photo ? (
-                      <span className="inline-flex items-center text-[10px] text-green-700 bg-green-100 font-bold px-1.5 py-0.5 rounded">
-                        <Check className="w-2.5 h-2.5 mr-0.5" /> Uploaded
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-[#8a8479]">Vector SVG</span>
-                    )}
-                  </span>
-                  {editing.photo && (
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveDefaultPhoto('front')}
-                      className="text-xs text-[#b3261e] hover:underline flex items-center gap-0.5"
-                      title="Remove front photo"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                      <span>Remove</span>
-                    </button>
-                  )}
-                </div>
-
-                <div className="w-full flex-1 flex items-center justify-center p-2">
-                  {editing.photo ? (
-                    <img
-                      src={editing.photo}
-                      alt="Front preview"
-                      className="max-h-24 max-w-full object-contain rounded border border-[#ddd6c8] bg-white p-1"
-                    />
-                  ) : (
-                    <div className="text-center text-[#8a8479] text-xs py-3 flex flex-col items-center gap-1">
-                      <Upload className="w-6 h-6 text-[#c4bdae]" />
-                      <span>No front photo uploaded</span>
-                    </div>
-                  )}
-                </div>
-
-                <label className="w-full mt-2 cursor-pointer bg-white hover:bg-[#141414] text-[#141414] hover:text-white border border-[#141414] py-1.5 px-3 rounded-lg text-xs font-bold text-center transition-colors flex items-center justify-center gap-1.5">
-                  <Upload className="w-3.5 h-3.5" />
-                  <span>{editing.photo ? 'Change Front Photo' : 'Upload Front Photo'}</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    hidden
-                    onChange={(e) => handleDefaultPhotoUpload('front', e)}
-                  />
-                </label>
-              </div>
-
-              {/* Back Image Box */}
-              {editing.hasBack && (
-                <div className="border border-[#ddd6c8] rounded-xl p-3 bg-[#faf8f4] flex flex-col items-center justify-between min-h-[170px] relative">
-                  <div className="w-full flex justify-between items-center mb-2">
-                    <span className="text-xs font-bold uppercase tracking-wider text-[#141414] flex items-center gap-1.5">
-                      Back Photo
-                      {editing.photoBack ? (
-                        <span className="inline-flex items-center text-[10px] text-green-700 bg-green-100 font-bold px-1.5 py-0.5 rounded">
-                          <Check className="w-2.5 h-2.5 mr-0.5" /> Uploaded
-                        </span>
-                      ) : (
-                        <span className="text-[10px] text-[#8a8479]">Vector SVG</span>
-                      )}
-                    </span>
-                    {editing.photoBack && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveDefaultPhoto('back')}
-                        className="text-xs text-[#b3261e] hover:underline flex items-center gap-0.5"
-                        title="Remove back photo"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                        <span>Remove</span>
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="w-full flex-1 flex items-center justify-center p-2">
-                    {editing.photoBack ? (
-                      <img
-                        src={editing.photoBack}
-                        alt="Back preview"
-                        className="max-h-24 max-w-full object-contain rounded border border-[#ddd6c8] bg-white p-1"
-                      />
-                    ) : (
-                      <div className="text-center text-[#8a8479] text-xs py-3 flex flex-col items-center gap-1">
-                        <Upload className="w-6 h-6 text-[#c4bdae]" />
-                        <span>No back photo uploaded</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <label className="w-full mt-2 cursor-pointer bg-white hover:bg-[#141414] text-[#141414] hover:text-white border border-[#141414] py-1.5 px-3 rounded-lg text-xs font-bold text-center transition-colors flex items-center justify-center gap-1.5">
-                    <Upload className="w-3.5 h-3.5" />
-                    <span>{editing.photoBack ? 'Change Back Photo' : 'Upload Back Photo'}</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      hidden
-                      onChange={(e) => handleDefaultPhotoUpload('back', e)}
-                    />
-                  </label>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* 3. Available Colors & Color-Specific Uploads */}
+          {/* 2. Available Colors & Color-Specific Uploads */}
           <div className="border-[1.5px] border-[#141414] rounded-xl p-4 bg-white space-y-4">
             <div className="flex justify-between items-baseline">
               <h5 className="font-anton text-base tracking-wide uppercase text-[#141414] flex items-center gap-2">
                 <Layers className="w-4 h-4 text-[#ff4d1c]" />
-                <span>Colors & Per-Color Images</span>
+                <span>Colors & Garment Photos</span>
               </h5>
               <span className="text-[11px] font-bold text-[#ff4d1c]">
                 {editing.colors.length} selected · {colorPhotosCount} custom photo{colorPhotosCount === 1 ? '' : 's'}
               </span>
             </div>
+
+            <p className="text-xs text-[#6b665d]">
+              Upload front and back photos for each color variation. If a color doesn&apos;t have uploaded photos, it will automatically use the dynamic vector preview.
+            </p>
 
             {/* Palette Multi-select */}
             <div>
@@ -707,11 +576,11 @@ export function ProductsManager({ products, currency, onSave, onDelete }: Produc
                                 </div>
                                 <div className="text-[10px] text-[#6b665d]">
                                   {frontImg ? (
-                                    <span className="text-green-700 font-semibold">Custom photo</span>
-                                  ) : editing.photo ? (
-                                    <span>Uses default photo</span>
+                                    <span className="text-green-700 font-semibold flex items-center gap-0.5">
+                                      <Check className="w-2.5 h-2.5" /> Photo uploaded
+                                    </span>
                                   ) : (
-                                    <span>Vector SVG</span>
+                                    <span>Vector SVG preview</span>
                                   )}
                                 </div>
                               </div>
@@ -761,11 +630,11 @@ export function ProductsManager({ products, currency, onSave, onDelete }: Produc
                                   </div>
                                   <div className="text-[10px] text-[#6b665d]">
                                     {backImg ? (
-                                      <span className="text-green-700 font-semibold">Custom photo</span>
-                                    ) : editing.photoBack ? (
-                                      <span>Uses default photo</span>
+                                      <span className="text-green-700 font-semibold flex items-center gap-0.5">
+                                        <Check className="w-2.5 h-2.5" /> Photo uploaded
+                                      </span>
                                     ) : (
-                                      <span>Vector SVG</span>
+                                      <span>Vector SVG preview</span>
                                     )}
                                   </div>
                                 </div>
