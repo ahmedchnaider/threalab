@@ -5,21 +5,22 @@ import { useAuth } from '@/context/AuthContext';
 import { useStore } from '@/context/StoreContext';
 import { useToast } from '@/context/ToastContext';
 import { CustomerProfile, OrderStatus } from '@/lib/types';
-import { LogOut, Eye, CheckCircle2, XCircle, Clock, Truck, Package } from 'lucide-react';
+import { LogOut, Eye, CheckCircle2, XCircle, Clock, Truck, Package, Mail, KeyRound, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 
 export default function AccountPage() {
-  const { user, profile, login, signup, logout, updateProfile, isLoading } = useAuth();
+  const { user, profile, login, verifyOtp, signup, logout, updateProfile, isLoading } = useAuth();
   const { orders, settings, cancelOrder } = useStore();
   const { toast } = useToast();
 
-  const [authMode, setAuthMode] = useState<'signin' | 'signup' | 'forgot'>('signin');
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [city, setCity] = useState('');
   const [address, setAddress] = useState('');
+  const [otpToken, setOtpToken] = useState('');
+  const [waitingForOtp, setWaitingForOtp] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [authError, setAuthError] = useState('');
 
@@ -53,26 +54,37 @@ export default function AccountPage() {
     setIsSubmitting(true);
     setAuthError('');
 
-    if (authMode === 'signin') {
-      const res = await login(email, password);
+    if (waitingForOtp) {
+      const res = await verifyOtp(email, otpToken);
       if (!res.success) {
-        setAuthError(res.error || 'Failed to log in');
+        setAuthError(res.error || 'Invalid or expired code. Please try again.');
+      } else {
+        setWaitingForOtp(false);
+      }
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (authMode === 'signin') {
+      const res = await login(email);
+      if (!res.success) {
+        setAuthError(res.error || 'Failed to sign in');
+      } else if (res.requiresOtp) {
+        setWaitingForOtp(true);
       }
     } else if (authMode === 'signup') {
       const res = await signup({
         name,
         email,
-        password,
         phone,
         city,
         address,
       });
       if (!res.success) {
         setAuthError(res.error || 'Failed to create account');
+      } else if (res.requiresOtp) {
+        setWaitingForOtp(true);
       }
-    } else {
-      toast('If an account exists, a reset link was sent to your email.');
-      setAuthMode('signin');
     }
     setIsSubmitting(false);
   };
@@ -97,117 +109,129 @@ export default function AccountPage() {
     );
   }
 
-  // 1. Not Logged In View
+  // 1. Not Logged In View (Passwordless)
   if (!user && !profile) {
     return (
       <div className="max-w-md mx-auto py-8">
         <div className="bg-[#fffdf8] border-[1.5px] border-[#141414] rounded-2xl p-6 sm:p-8 space-y-6 shadow-[6px_6px_0_#141414]">
           <div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#141414] text-[#f4f1ea] text-[11px] font-bold uppercase tracking-wider mb-2">
+              <Mail className="w-3 h-3 text-[#ff4d1c]" />
+              <span>Passwordless Sign-In</span>
+            </div>
             <h1 className="font-anton text-3xl uppercase tracking-wide text-[#141414]">
-              {authMode === 'signin'
-                ? 'Welcome Back'
-                : authMode === 'signup'
-                ? 'Create Account'
-                : 'Reset Password'}
+              {waitingForOtp
+                ? 'Check Your Email'
+                : authMode === 'signin'
+                ? 'Log in to Threadlab'
+                : 'Create Account'}
             </h1>
-            <p className="text-xs text-[#6b665d] mt-1">
-              {authMode === 'signin'
-                ? 'Sign in to access your custom designs, track deliveries, and manage orders.'
-                : 'Create a free account to track your orders and save designs.'}
+            <p className="text-xs text-[#6b665d] mt-1 leading-relaxed">
+              {waitingForOtp
+                ? `We sent a 6-digit code / magic link to ${email}. Enter the code below or click the link in your email.`
+                : authMode === 'signin'
+                ? 'No password required! Simply enter your email address to sign in.'
+                : 'Fill in your delivery info. You will never need to remember a password.'}
             </p>
           </div>
 
           <form onSubmit={handleAuthSubmit} className="space-y-3.5 text-sm">
-            {authMode === 'signup' && (
+            {waitingForOtp ? (
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-[#6b665d] mb-1">
-                  Full Name *
+                  6-Digit Verification Code
                 </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Ahmed Ben Salem"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c]"
-                />
+                <div className="relative">
+                  <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#6b665d]" />
+                  <input
+                    type="text"
+                    required
+                    autoFocus
+                    maxLength={10}
+                    placeholder="e.g. 123456"
+                    value={otpToken}
+                    onChange={(e) => setOtpToken(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2.5 bg-white border-[1.5px] border-[#141414] rounded-xl font-mono text-center tracking-widest text-lg font-bold focus:outline-none focus:ring-2 focus:ring-[#ff4d1c]"
+                  />
+                </div>
               </div>
-            )}
-
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-[#6b665d] mb-1">
-                Email Address *
-              </label>
-              <input
-                type="email"
-                required
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c]"
-              />
-            </div>
-
-            {authMode !== 'forgot' && (
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-[#6b665d] mb-1">
-                  Password *
-                </label>
-                <input
-                  type="password"
-                  required
-                  minLength={6}
-                  placeholder="At least 6 characters"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c]"
-                />
-              </div>
-            )}
-
-            {authMode === 'signup' && (
+            ) : (
               <>
-                <div className="grid grid-cols-2 gap-3">
+                {authMode === 'signup' && (
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-[#6b665d] mb-1">
-                      Phone *
-                    </label>
-                    <input
-                      type="tel"
-                      required
-                      placeholder="+216 00 000 000"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-[#6b665d] mb-1">
-                      City
+                      Full Name *
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. Tunis"
-                      value={city}
-                      onChange={(e) => setCity(e.target.value)}
+                      required
+                      placeholder="e.g. Ahmed Ben Salem"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
                       className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c]"
                     />
                   </div>
-                </div>
+                )}
 
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-[#6b665d] mb-1">
-                    Street Address
+                    Email Address *
                   </label>
                   <input
-                    type="text"
-                    placeholder="Your delivery address"
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
+                    type="email"
+                    required
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c]"
                   />
                 </div>
+
+                {authMode === 'signup' && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-[#6b665d] mb-1">
+                          Phone *
+                        </label>
+                        <input
+                          type="tel"
+                          required
+                          placeholder="+216 00 000 000"
+                          value={phone}
+                          onChange={(e) => setPhone(e.target.value)}
+                          className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c]"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-[#6b665d] mb-1">
+                          City
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Tunis"
+                          value={city}
+                          onChange={(e) => setCity(e.target.value)}
+                          className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c]"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-[#6b665d] mb-1">
+                        Street Address
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Your delivery address"
+                        value={address}
+                        onChange={(e) => setAddress(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c]"
+                      />
+                    </div>
+                  </>
+                )}
               </>
             )}
 
@@ -216,47 +240,59 @@ export default function AccountPage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full bg-[#141414] hover:bg-[#ff4d1c] disabled:opacity-50 text-[#f4f1ea] border-[1.5px] border-[#141414] hover:border-[#ff4d1c] py-3 rounded-full font-bold text-sm tracking-wide transition-colors"
+              className="w-full bg-[#141414] hover:bg-[#ff4d1c] disabled:opacity-50 text-[#f4f1ea] border-[1.5px] border-[#141414] hover:border-[#ff4d1c] py-3 rounded-full font-bold text-sm tracking-wide transition-colors flex items-center justify-center gap-2"
             >
-              {isSubmitting
-                ? 'Processing…'
-                : authMode === 'signin'
-                ? 'Log in'
-                : authMode === 'signup'
-                ? 'Create free account'
-                : 'Send reset link'}
+              <span>
+                {isSubmitting
+                  ? 'Connecting…'
+                  : waitingForOtp
+                  ? 'Verify Code & Sign In'
+                  : authMode === 'signin'
+                  ? 'Continue with Email'
+                  : 'Create Free Account'}
+              </span>
+              <ArrowRight className="w-4 h-4" />
             </button>
+
+            {waitingForOtp && (
+              <button
+                type="button"
+                onClick={() => setWaitingForOtp(false)}
+                className="w-full text-center text-xs text-[#6b665d] hover:underline pt-1"
+              >
+                Use a different email address
+              </button>
+            )}
           </form>
 
           {/* Toggle modes */}
-          <div className="flex flex-col gap-2 pt-2 border-t border-[#ddd6c8] text-xs">
-            {authMode === 'signin' ? (
-              <>
+          {!waitingForOtp && (
+            <div className="flex flex-col gap-2 pt-2 border-t border-[#ddd6c8] text-xs">
+              {authMode === 'signin' ? (
                 <button
                   type="button"
-                  onClick={() => setAuthMode('signup')}
+                  onClick={() => {
+                    setAuthMode('signup');
+                    setAuthError('');
+                  }}
                   className="text-left font-bold text-[#141414] hover:underline"
                 >
-                  New here? Create an account →
+                  New here? Create an account in 30 seconds →
                 </button>
+              ) : (
                 <button
                   type="button"
-                  onClick={() => setAuthMode('forgot')}
-                  className="text-left text-[#6b665d] hover:underline"
+                  onClick={() => {
+                    setAuthMode('signin');
+                    setAuthError('');
+                  }}
+                  className="text-left font-bold text-[#141414] hover:underline"
                 >
-                  Forgot your password?
+                  Already have an account? Sign in with email →
                 </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setAuthMode('signin')}
-                className="text-left font-bold text-[#141414] hover:underline"
-              >
-                ← Back to Log In
-              </button>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     );

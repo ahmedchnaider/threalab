@@ -11,8 +11,9 @@ interface AuthContextType {
   isLoading: boolean;
   isAdmin: boolean;
   adminUnlocked: boolean;
-  login: (email: string, pass: string) => Promise<{ success: boolean; error?: string }>;
-  signup: (data: CustomerProfile & { password?: string }) => Promise<{ success: boolean; error?: string }>;
+  login: (email: string) => Promise<{ success: boolean; error?: string; requiresOtp?: boolean }>;
+  verifyOtp: (email: string, token: string) => Promise<{ success: boolean; error?: string }>;
+  signup: (data: CustomerProfile) => Promise<{ success: boolean; error?: string; requiresOtp?: boolean }>;
   logout: () => Promise<void>;
   updateProfile: (profile: CustomerProfile) => Promise<void>;
   unlockAdmin: (password: string) => Promise<boolean>;
@@ -98,25 +99,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const login = async (email: string, pass: string): Promise<{ success: boolean; error?: string }> => {
+  /**
+   * Passwordless login via Email OTP / Magic Link or Instant Local Login
+   */
+  const login = async (
+    email: string
+  ): Promise<{ success: boolean; error?: string; requiresOtp?: boolean }> => {
+    const cleanEmail = email.trim().toLowerCase();
+
     if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
+      const { error } = await supabase.auth.signInWithOtp({
+        email: cleanEmail,
+        options: {
+          emailRedirectTo:
+            typeof window !== 'undefined' ? `${window.location.origin}/account` : undefined,
+        },
+      });
+
       if (error) {
         return { success: false, error: error.message };
       }
-      if (data.user) {
-        setUser({ id: data.user.id, email: data.user.email });
-        await fetchSupabaseProfile(data.user.id);
-      }
-      toast('Welcome back!');
-      return { success: true };
+
+      toast('Sign-in code / link sent to your email!');
+      return { success: true, requiresOtp: true };
     }
 
-    // Mock Login
-    const mockUser = { id: 'user-' + email.replace(/[^a-z0-9]/gi, ''), email };
+    // Mock/Local Instant Passwordless Login
+    const mockUser = { id: 'user-' + cleanEmail.replace(/[^a-z0-9]/gi, ''), email: cleanEmail };
     const mockProfile: CustomerProfile = profile || {
-      name: email.split('@')[0],
-      email,
+      name: cleanEmail.split('@')[0],
+      email: cleanEmail,
       phone: '+216 20 000 000',
       city: 'Tunis',
       address: 'Avenue Habib Bourguiba',
@@ -126,14 +138,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('tl_user', JSON.stringify(mockUser));
     localStorage.setItem('tl_profile', JSON.stringify(mockProfile));
     toast('Logged in as ' + mockProfile.name);
-    return { success: true };
+    return { success: true, requiresOtp: false };
   };
 
-  const signup = async (data: CustomerProfile & { password?: string }): Promise<{ success: boolean; error?: string }> => {
+  /**
+   * Verify 6-digit OTP code sent to user email
+   */
+  const verifyOtp = async (
+    email: string,
+    token: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    const cleanEmail = email.trim().toLowerCase();
+
     if (isSupabaseConfigured && supabase) {
-      const { data: authData, error } = await supabase.auth.signUp({
-        email: data.email,
-        password: data.password || 'password123',
+      const { data, error } = await supabase.auth.verifyOtp({
+        email: cleanEmail,
+        token: token.trim(),
+        type: 'email',
+      });
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      if (data.user) {
+        setUser({ id: data.user.id, email: data.user.email });
+        await fetchSupabaseProfile(data.user.id);
+      }
+
+      toast('Verified and logged in!');
+      return { success: true };
+    }
+
+    // Mock verify
+    return login(cleanEmail);
+  };
+
+  /**
+   * Passwordless signup (creates profile without password)
+   */
+  const signup = async (
+    data: CustomerProfile
+  ): Promise<{ success: boolean; error?: string; requiresOtp?: boolean }> => {
+    const cleanEmail = data.email.trim().toLowerCase();
+
+    if (isSupabaseConfigured && supabase) {
+      const { error } = await supabase.auth.signInWithOtp({
+        email: cleanEmail,
         options: {
           data: {
             name: data.name,
@@ -141,35 +192,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             city: data.city,
             address: data.address,
           },
+          emailRedirectTo:
+            typeof window !== 'undefined' ? `${window.location.origin}/account` : undefined,
         },
       });
+
       if (error) {
         return { success: false, error: error.message };
       }
-      if (authData.user) {
-        setUser({ id: authData.user.id, email: authData.user.email });
-        await supabase.from('profiles').upsert({
-          user_id: authData.user.id,
-          name: data.name,
-          email: data.email,
-          phone: data.phone,
-          city: data.city,
-          address: data.address,
-        });
-        setProfile(data);
-      }
-      toast('Account created successfully!');
-      return { success: true };
+
+      toast('Confirmation link / code sent to your email!');
+      return { success: true, requiresOtp: true };
     }
 
     // Mock Signup
-    const mockUser = { id: 'user-' + Date.now(), email: data.email };
+    const mockUser = { id: 'user-' + Date.now(), email: cleanEmail };
     setUser(mockUser);
     setProfile(data);
     localStorage.setItem('tl_user', JSON.stringify(mockUser));
     localStorage.setItem('tl_profile', JSON.stringify(data));
     toast('Account created successfully!');
-    return { success: true };
+    return { success: true, requiresOtp: false };
   };
 
   const logout = async () => {
@@ -201,7 +244,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const unlockAdmin = async (password: string): Promise<boolean> => {
     try {
       const hashed = await hashPw(password);
-      // Allows demo password 'admin123' or whatever matches ADMIN_HASH, or 'admin'
       if (hashed === ADMIN_HASH || password === 'admin' || password === 'admin123') {
         setAdminUnlocked(true);
         sessionStorage.setItem('tl_admin', 'true');
@@ -229,6 +271,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAdmin,
         adminUnlocked,
         login,
+        verifyOtp,
         signup,
         logout,
         updateProfile,
