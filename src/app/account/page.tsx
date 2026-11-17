@@ -1,0 +1,569 @@
+'use client';
+
+import React, { useState } from 'react';
+import { useAuth } from '@/context/AuthContext';
+import { useStore } from '@/context/StoreContext';
+import { useToast } from '@/context/ToastContext';
+import { CustomerProfile, OrderStatus } from '@/lib/types';
+import { LogOut, Eye, CheckCircle2, XCircle, Clock, Truck, Package } from 'lucide-react';
+import Link from 'next/link';
+
+export default function AccountPage() {
+  const { user, profile, login, signup, logout, updateProfile, isLoading } = useAuth();
+  const { orders, settings, cancelOrder } = useStore();
+  const { toast } = useToast();
+
+  const [authMode, setAuthMode] = useState<'signin' | 'signup' | 'forgot'>('signin');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [city, setCity] = useState('');
+  const [address, setAddress] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [authError, setAuthError] = useState('');
+
+  // Profile Form state
+  const [profileForm, setProfileForm] = useState<CustomerProfile>({
+    name: profile?.name || '',
+    email: profile?.email || user?.email || '',
+    phone: profile?.phone || '',
+    city: profile?.city || '',
+    address: profile?.address || '',
+  });
+
+  const [expandedDesigns, setExpandedDesigns] = useState<Record<string, boolean>>({});
+  const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
+
+  // Sync profile form when profile loads
+  React.useEffect(() => {
+    if (profile) {
+      setProfileForm({
+        name: profile.name,
+        email: profile.email || user?.email || '',
+        phone: profile.phone,
+        city: profile.city,
+        address: profile.address,
+      });
+    }
+  }, [profile, user]);
+
+  const handleAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setAuthError('');
+
+    if (authMode === 'signin') {
+      const res = await login(email, password);
+      if (!res.success) {
+        setAuthError(res.error || 'Failed to log in');
+      }
+    } else if (authMode === 'signup') {
+      const res = await signup({
+        name,
+        email,
+        password,
+        phone,
+        city,
+        address,
+      });
+      if (!res.success) {
+        setAuthError(res.error || 'Failed to create account');
+      }
+    } else {
+      toast('If an account exists, a reset link was sent to your email.');
+      setAuthMode('signin');
+    }
+    setIsSubmitting(false);
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await updateProfile(profileForm);
+  };
+
+  // Filter orders for this customer (by user ID or email)
+  const myOrders = orders.filter((o) => {
+    if (user && o.uid === user.id) return true;
+    if (profile?.email && o.customer?.email?.toLowerCase() === profile.email.toLowerCase()) return true;
+    return false;
+  });
+
+  if (isLoading) {
+    return (
+      <div className="border-[1.5px] border-dashed border-[#ddd6c8] rounded-2xl p-16 text-center text-[#6b665d]">
+        Loading your account…
+      </div>
+    );
+  }
+
+  // 1. Not Logged In View
+  if (!user && !profile) {
+    return (
+      <div className="max-w-md mx-auto py-8">
+        <div className="bg-[#fffdf8] border-[1.5px] border-[#141414] rounded-2xl p-6 sm:p-8 space-y-6 shadow-[6px_6px_0_#141414]">
+          <div>
+            <h1 className="font-anton text-3xl uppercase tracking-wide text-[#141414]">
+              {authMode === 'signin'
+                ? 'Welcome Back'
+                : authMode === 'signup'
+                ? 'Create Account'
+                : 'Reset Password'}
+            </h1>
+            <p className="text-xs text-[#6b665d] mt-1">
+              {authMode === 'signin'
+                ? 'Sign in to access your custom designs, track deliveries, and manage orders.'
+                : 'Create a free account to track your orders and save designs.'}
+            </p>
+          </div>
+
+          <form onSubmit={handleAuthSubmit} className="space-y-3.5 text-sm">
+            {authMode === 'signup' && (
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#6b665d] mb-1">
+                  Full Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Ahmed Ben Salem"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c]"
+                />
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-[#6b665d] mb-1">
+                Email Address *
+              </label>
+              <input
+                type="email"
+                required
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c]"
+              />
+            </div>
+
+            {authMode !== 'forgot' && (
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#6b665d] mb-1">
+                  Password *
+                </label>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  placeholder="At least 6 characters"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c]"
+                />
+              </div>
+            )}
+
+            {authMode === 'signup' && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-[#6b665d] mb-1">
+                      Phone *
+                    </label>
+                    <input
+                      type="tel"
+                      required
+                      placeholder="+216 00 000 000"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-[#6b665d] mb-1">
+                      City
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Tunis"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c]"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#6b665d] mb-1">
+                    Street Address
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Your delivery address"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c]"
+                  />
+                </div>
+              </>
+            )}
+
+            {authError && <div className="text-xs text-[#b3261e] font-semibold">{authError}</div>}
+
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full bg-[#141414] hover:bg-[#ff4d1c] disabled:opacity-50 text-[#f4f1ea] border-[1.5px] border-[#141414] hover:border-[#ff4d1c] py-3 rounded-full font-bold text-sm tracking-wide transition-colors"
+            >
+              {isSubmitting
+                ? 'Processing…'
+                : authMode === 'signin'
+                ? 'Log in'
+                : authMode === 'signup'
+                ? 'Create free account'
+                : 'Send reset link'}
+            </button>
+          </form>
+
+          {/* Toggle modes */}
+          <div className="flex flex-col gap-2 pt-2 border-t border-[#ddd6c8] text-xs">
+            {authMode === 'signin' ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setAuthMode('signup')}
+                  className="text-left font-bold text-[#141414] hover:underline"
+                >
+                  New here? Create an account →
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAuthMode('forgot')}
+                  className="text-left text-[#6b665d] hover:underline"
+                >
+                  Forgot your password?
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setAuthMode('signin')}
+                className="text-left font-bold text-[#141414] hover:underline"
+              >
+                ← Back to Log In
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Logged In Customer Profile & Orders View
+  const initials = (profile?.name || user?.email || '?')
+    .split(' ')
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+
+  const statusBadge = (status: OrderStatus) => {
+    switch (status) {
+      case 'new':
+        return (
+          <span className="inline-flex items-center gap-1 bg-[#ff4d1c] text-white text-[11px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+            <Clock className="w-3 h-3" />
+            <span>New</span>
+          </span>
+        );
+      case 'in production':
+        return (
+          <span className="inline-flex items-center gap-1 bg-amber-500 text-white text-[11px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+            <Package className="w-3 h-3" />
+            <span>In Production</span>
+          </span>
+        );
+      case 'shipped':
+        return (
+          <span className="inline-flex items-center gap-1 bg-blue-600 text-white text-[11px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+            <Truck className="w-3 h-3" />
+            <span>Shipped</span>
+          </span>
+        );
+      case 'delivered':
+        return (
+          <span className="inline-flex items-center gap-1 bg-[#2f7a4a] text-white text-[11px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+            <CheckCircle2 className="w-3 h-3" />
+            <span>Delivered</span>
+          </span>
+        );
+      case 'cancelled':
+        return (
+          <span className="inline-flex items-center gap-1 bg-zinc-400 text-white text-[11px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+            <XCircle className="w-3 h-3" />
+            <span>Cancelled</span>
+          </span>
+        );
+    }
+  };
+
+  return (
+    <div className="space-y-8">
+      {/* Banner */}
+      <div className="bg-[#fffdf8] border-[1.5px] border-[#141414] rounded-2xl p-5 sm:p-6 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 rounded-full bg-[#ff4d1c] text-white font-bold flex items-center justify-center font-anton tracking-wider text-xl">
+            {initials}
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block" />
+              <h2 className="font-bold text-lg text-[#141414]">
+                {profile?.name || user?.email?.split('@')[0]}
+              </h2>
+            </div>
+            <div className="text-xs text-[#6b665d]">{user?.email || profile?.email}</div>
+          </div>
+        </div>
+
+        <button
+          onClick={logout}
+          className="px-4 py-2 rounded-full border border-[#141414] hover:bg-[#141414] hover:text-[#f4f1ea] text-xs font-bold flex items-center gap-2 transition-colors"
+        >
+          <LogOut className="w-3.5 h-3.5" />
+          <span>Log out</span>
+        </button>
+      </div>
+
+      {/* Orders and Profile Details */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* Left: Orders */}
+        <div className="lg:col-span-7 space-y-4">
+          <h3 className="font-anton text-2xl uppercase tracking-wide text-[#141414]">
+            My Orders ({myOrders.length})
+          </h3>
+
+          {myOrders.length === 0 ? (
+            <div className="border-[1.5px] border-dashed border-[#ddd6c8] rounded-2xl p-12 text-center space-y-3 text-[#6b665d]">
+              <p className="text-sm">You haven't placed any orders yet.</p>
+              <Link
+                href="/"
+                className="inline-block px-5 py-2 rounded-full bg-[#141414] text-[#f4f1ea] text-xs font-bold hover:bg-[#ff4d1c] transition-colors"
+              >
+                Start Designing Now
+              </Link>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {myOrders.map((o) => {
+                const hasDesigns = Boolean(o.orderItems?.length);
+
+                return (
+                  <div
+                    key={o.id}
+                    className="bg-[#fffdf8] border-[1.5px] border-[#141414] rounded-2xl p-5 space-y-3"
+                  >
+                    <div className="flex justify-between items-start gap-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-anton text-lg text-[#141414]">
+                            #{o.code}
+                          </span>
+                          <span className="text-xs text-[#6b665d]">
+                            · {new Date(o.createdAt).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <div className="text-xs text-[#6b665d] mt-0.5">
+                          {o.items?.map((it) => `${it.qty}× ${it.name}`).join(', ')}
+                        </div>
+                        <div className="text-xs text-[#6b665d]">
+                          Deliver to: {o.customer.city}, {o.customer.address}
+                        </div>
+                      </div>
+
+                      <div className="text-right space-y-1.5">
+                        <div>{statusBadge(o.status)}</div>
+                        <div className="font-anton text-lg text-[#141414]">
+                          {o.total} {settings.currency}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-[#ddd6c8]">
+                      {hasDesigns ? (
+                        <button
+                          onClick={() =>
+                            setExpandedDesigns((prev) => ({
+                              ...prev,
+                              [o.id]: !prev[o.id],
+                            }))
+                          }
+                          className="text-xs font-bold text-[#141414] hover:text-[#ff4d1c] flex items-center gap-1"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>
+                            {expandedDesigns[o.id] ? 'Hide Artwork' : 'View Artwork Previews'}
+                          </span>
+                        </button>
+                      ) : (
+                        <div />
+                      )}
+
+                      {o.status === 'new' && (
+                        <button
+                          onClick={() => {
+                            if (confirmCancelId === o.id) {
+                              cancelOrder(o.id);
+                              setConfirmCancelId(null);
+                            } else {
+                              setConfirmCancelId(o.id);
+                              setTimeout(() => setConfirmCancelId(null), 4000);
+                            }
+                          }}
+                          className={`text-xs font-bold px-3 py-1 rounded-lg border transition-colors ${
+                            confirmCancelId === o.id
+                              ? 'bg-[#b3261e] text-white border-[#b3261e]'
+                              : 'text-[#b3261e] border-[#b3261e] hover:bg-[#b3261e] hover:text-white'
+                          }`}
+                        >
+                          {confirmCancelId === o.id ? 'Click to confirm cancel' : 'Cancel Order'}
+                        </button>
+                      )}
+
+                      {o.status === 'in production' && (
+                        <span className="text-[11px] text-[#6b665d]">
+                          In production (cannot be cancelled)
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Artwork Preview Modal inside Card */}
+                    {expandedDesigns[o.id] && (
+                      <div className="grid grid-cols-2 gap-3 pt-3 border-t border-[#ddd6c8]">
+                        {o.orderItems?.map((item, idx) => (
+                          <div
+                            key={idx}
+                            className="bg-[#ebe6dc]/50 p-2.5 rounded-xl border border-[#ddd6c8] space-y-1.5 text-xs text-center"
+                          >
+                            <div className="grid grid-cols-2 gap-1.5">
+                              <img
+                                src={item.mockup}
+                                alt="Mockup"
+                                className="w-full aspect-[6/7] object-contain rounded bg-[#ebe6dc]"
+                              />
+                              {item.design ? (
+                                <img
+                                  src={item.design}
+                                  alt="Print file"
+                                  className="w-full aspect-[6/7] object-contain rounded checker-bg"
+                                />
+                              ) : (
+                                <div className="w-full aspect-[6/7] rounded bg-[#ebe6dc] flex items-center justify-center text-[10px] text-[#6b665d]">
+                                  No artwork
+                                </div>
+                              )}
+                            </div>
+                            <span className="block text-[11px] font-bold truncate">
+                              {item.side} view ({item.name})
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Right: Customer Profile Details */}
+        <div className="lg:col-span-5 bg-[#fffdf8] border-[1.5px] border-[#141414] rounded-2xl p-5 sm:p-6 space-y-4 shadow-[4px_4px_0_#141414]">
+          <h3 className="font-anton text-2xl uppercase tracking-wide text-[#141414]">
+            My Details
+          </h3>
+          <p className="text-xs text-[#6b665d]">
+            Saved to your profile and automatically pre-filled at checkout.
+          </p>
+
+          <form onSubmit={handleSaveProfile} className="space-y-3.5 text-sm">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-[#6b665d] mb-1">
+                Full Name
+              </label>
+              <input
+                type="text"
+                required
+                value={profileForm.name}
+                onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
+                className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c]"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-[#6b665d] mb-1">
+                Email
+              </label>
+              <input
+                type="email"
+                required
+                value={profileForm.email}
+                onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
+                className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c]"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-[#6b665d] mb-1">
+                Phone
+              </label>
+              <input
+                type="tel"
+                required
+                value={profileForm.phone}
+                onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+                className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c]"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-[#6b665d] mb-1">
+                City
+              </label>
+              <input
+                type="text"
+                required
+                value={profileForm.city}
+                onChange={(e) => setProfileForm({ ...profileForm, city: e.target.value })}
+                className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c]"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-[#6b665d] mb-1">
+                Street Address
+              </label>
+              <input
+                type="text"
+                required
+                value={profileForm.address}
+                onChange={(e) => setProfileForm({ ...profileForm, address: e.target.value })}
+                className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c]"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full bg-[#141414] hover:bg-[#ff4d1c] text-[#f4f1ea] border-[1.5px] border-[#141414] hover:border-[#ff4d1c] py-3 rounded-full font-bold text-sm transition-colors"
+            >
+              Save Profile Details
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
