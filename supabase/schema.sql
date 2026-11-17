@@ -276,10 +276,10 @@ INSERT INTO storage.buckets (id, name, public)
 VALUES ('media', 'media', true)
 ON CONFLICT (id) DO UPDATE SET public = true;
 
--- Create private 'orders' bucket for mockups and print files
+-- Create public 'orders' bucket for mockups and print files
 INSERT INTO storage.buckets (id, name, public)
-VALUES ('orders', 'orders', false)
-ON CONFLICT (id) DO UPDATE SET public = false;
+VALUES ('orders', 'orders', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
 
 -- Clean legacy storage policies
 DROP POLICY IF EXISTS "media admin insert" ON storage.objects;
@@ -303,7 +303,7 @@ CREATE POLICY "Order mockups upload" ON storage.objects
   FOR INSERT WITH CHECK (bucket_id = 'orders');
 
 CREATE POLICY "Order mockups access" ON storage.objects
-  FOR SELECT USING (bucket_id = 'orders' AND (auth.uid()::text = (storage.foldername(name))[1] OR public.is_admin()));
+  FOR SELECT USING (bucket_id = 'orders');
 
 -- ==============================================================================
 -- 11. INITIAL SEED DATA

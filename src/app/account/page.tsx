@@ -5,6 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useStore } from '@/context/StoreContext';
 import { useToast } from '@/context/ToastContext';
 import { CustomerProfile, OrderStatus } from '@/lib/types';
+import { formatMediaUrl } from '@/lib/garments';
 import { LogOut, Eye, CheckCircle2, XCircle, Clock, Truck, Package, Mail, KeyRound, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 
@@ -498,34 +499,39 @@ export default function AccountPage() {
                     {/* Artwork Preview Modal inside Card */}
                     {expandedDesigns[o.id] && (
                       <div className="grid grid-cols-2 gap-3 pt-3 border-t border-[#ddd6c8]">
-                        {o.orderItems?.map((item, idx) => (
-                          <div
-                            key={idx}
-                            className="bg-[#ebe6dc]/50 p-2.5 rounded-xl border border-[#ddd6c8] space-y-1.5 text-xs text-center"
-                          >
-                            <div className="grid grid-cols-2 gap-1.5">
-                              <img
-                                src={item.mockup}
-                                alt="Mockup"
-                                className="w-full aspect-[6/7] object-contain rounded bg-[#ebe6dc]"
-                              />
-                              {item.design ? (
+                        {o.orderItems?.map((item, idx) => {
+                          const mockupSrc = formatMediaUrl(item.mockup);
+                          const designSrc = formatMediaUrl(item.design);
+
+                          return (
+                            <div
+                              key={idx}
+                              className="bg-[#ebe6dc]/50 p-2.5 rounded-xl border border-[#ddd6c8] space-y-1.5 text-xs text-center"
+                            >
+                              <div className="grid grid-cols-2 gap-1.5">
                                 <img
-                                  src={item.design}
-                                  alt="Print file"
-                                  className="w-full aspect-[6/7] object-contain rounded checker-bg"
+                                  src={mockupSrc}
+                                  alt="Mockup"
+                                  className="w-full aspect-[6/7] object-contain rounded bg-[#ebe6dc]"
                                 />
-                              ) : (
-                                <div className="w-full aspect-[6/7] rounded bg-[#ebe6dc] flex items-center justify-center text-[10px] text-[#6b665d]">
-                                  No artwork
-                                </div>
-                              )}
+                                {designSrc ? (
+                                  <img
+                                    src={designSrc}
+                                    alt="Print file"
+                                    className="w-full aspect-[6/7] object-contain rounded checker-bg"
+                                  />
+                                ) : (
+                                  <div className="w-full aspect-[6/7] rounded bg-[#ebe6dc] flex items-center justify-center text-[10px] text-[#6b665d]">
+                                    No artwork
+                                  </div>
+                                )}
+                              </div>
+                              <span className="block text-[11px] font-bold truncate">
+                                {item.side} view ({item.name})
+                              </span>
                             </div>
-                            <span className="block text-[11px] font-bold truncate">
-                              {item.side} view ({item.name})
-                            </span>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>

@@ -2,8 +2,9 @@
 
 import React, { useState } from 'react';
 import { Order, OrderStatus } from '@/lib/types';
-import { Trash2, Copy, Check, Eye } from 'lucide-react';
+import { Trash2, Copy, Check, Eye, ExternalLink } from 'lucide-react';
 import { useToast } from '@/context/ToastContext';
+import { formatMediaUrl } from '@/lib/garments';
 
 interface OrdersManagerProps {
   orders: Order[];
@@ -233,64 +234,112 @@ export function OrdersManager({ orders, currency, onUpdateStatus, onDeleteOrder 
 
                     {expandedDesigns[o.id] && (
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mt-4 p-4 bg-[#ebe6dc]/50 rounded-xl border border-[#ddd6c8]">
-                        {o.orderItems?.map((item, idx) => (
-                          <div
-                            key={idx}
-                            className="bg-white border border-[#ddd6c8] rounded-xl p-3 space-y-2 text-xs"
-                          >
-                            <div className="grid grid-cols-2 gap-2">
-                              <div>
-                                <img
-                                  src={item.mockup}
-                                  alt="Mockup"
-                                  className="w-full aspect-[6/7] object-contain rounded-lg bg-[#ebe6dc]"
-                                />
-                                <span className="block text-[10px] text-center text-[#6b665d] mt-1 uppercase font-semibold">
-                                  {item.side} Mockup
-                                </span>
-                              </div>
-                              <div>
-                                {item.design ? (
-                                  <img
-                                    src={item.design}
-                                    alt="Print File"
-                                    className="w-full aspect-[6/7] object-contain rounded-lg checker-bg"
-                                  />
-                                ) : (
-                                  <div className="w-full aspect-[6/7] rounded-lg bg-[#ebe6dc] flex items-center justify-center text-[#6b665d] text-[10px] text-center p-2">
-                                    No custom print
-                                  </div>
-                                )}
-                                <span className="block text-[10px] text-center text-[#6b665d] mt-1 uppercase font-semibold">
-                                  {item.side} Print File
-                                </span>
-                              </div>
-                            </div>
+                        {o.orderItems?.map((item, idx) => {
+                          const mockupSrc = formatMediaUrl(item.mockup);
+                          const designSrc = formatMediaUrl(item.design);
 
-                            <div className="font-bold text-[#141414] truncate">
-                              {item.qty}× {item.name} {item.size && `(${item.size})`}
-                            </div>
+                          return (
+                            <div
+                              key={idx}
+                              className="bg-white border border-[#ddd6c8] rounded-xl p-3 space-y-2 text-xs"
+                            >
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  {mockupSrc ? (
+                                    <a
+                                      href={mockupSrc}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="block group relative"
+                                      title="Click to view full mockup"
+                                    >
+                                      <img
+                                        src={mockupSrc}
+                                        alt="Mockup"
+                                        className="w-full aspect-[6/7] object-contain rounded-lg bg-[#ebe6dc] border border-[#ddd6c8]"
+                                      />
+                                      <span className="absolute bottom-1 right-1 bg-black/70 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <ExternalLink className="w-3 h-3" />
+                                      </span>
+                                    </a>
+                                  ) : (
+                                    <div className="w-full aspect-[6/7] rounded-lg bg-[#ebe6dc] flex items-center justify-center text-[#6b665d] text-[10px]">
+                                      No mockup
+                                    </div>
+                                  )}
+                                  <span className="block text-[10px] text-center text-[#6b665d] mt-1 uppercase font-semibold">
+                                    {item.side} Mockup
+                                  </span>
+                                </div>
 
-                            {item.design && (
-                              <button
-                                onClick={() => copyPrintLink(item.design)}
-                                className="w-full py-1.5 px-2 rounded-lg border border-[#141414] hover:bg-[#141414] hover:text-white text-[11px] font-semibold flex items-center justify-center gap-1 transition-colors"
-                              >
-                                {copiedLink === item.design ? (
-                                  <>
-                                    <Check className="w-3.5 h-3.5 text-green-600" />
-                                    <span>Link Copied!</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Copy className="w-3.5 h-3.5" />
-                                    <span>Copy Print Link</span>
-                                  </>
-                                )}
-                              </button>
-                            )}
-                          </div>
-                        ))}
+                                <div>
+                                  {designSrc ? (
+                                    <a
+                                      href={designSrc}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="block group relative"
+                                      title="Click to view high-res print PNG"
+                                    >
+                                      <img
+                                        src={designSrc}
+                                        alt="Print File"
+                                        className="w-full aspect-[6/7] object-contain rounded-lg checker-bg border border-[#ddd6c8]"
+                                      />
+                                      <span className="absolute bottom-1 right-1 bg-black/70 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <ExternalLink className="w-3 h-3" />
+                                      </span>
+                                    </a>
+                                  ) : (
+                                    <div className="w-full aspect-[6/7] rounded-lg bg-[#ebe6dc] flex items-center justify-center text-[#6b665d] text-[10px] text-center p-2">
+                                      No custom print
+                                    </div>
+                                  )}
+                                  <span className="block text-[10px] text-center text-[#6b665d] mt-1 uppercase font-semibold">
+                                    {item.side} Print File
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="font-bold text-[#141414] truncate">
+                                {item.qty}× {item.name} {item.size && `(${item.size})`}
+                              </div>
+
+                              {designSrc && (
+                                <div className="flex gap-1.5 pt-1">
+                                  <button
+                                    onClick={() => copyPrintLink(designSrc)}
+                                    className="flex-1 py-1.5 px-2 rounded-lg border border-[#141414] hover:bg-[#141414] hover:text-white text-[11px] font-semibold flex items-center justify-center gap-1 transition-colors"
+                                  >
+                                    {copiedLink === designSrc ? (
+                                      <>
+                                        <Check className="w-3.5 h-3.5 text-green-600" />
+                                        <span>Copied!</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Copy className="w-3.5 h-3.5" />
+                                        <span>Copy Link</span>
+                                      </>
+                                    )}
+                                  </button>
+
+                                  <a
+                                    href={designSrc}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    download={`${item.name}-${item.side}-print.png`}
+                                    className="py-1.5 px-2.5 rounded-lg bg-[#141414] hover:bg-[#ff4d1c] text-white text-[11px] font-semibold flex items-center justify-center gap-1 transition-colors"
+                                    title="Open / Download PNG"
+                                  >
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                    <span>Open</span>
+                                  </a>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>

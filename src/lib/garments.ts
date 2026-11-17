@@ -184,3 +184,24 @@ export function hasProductPhoto(
   }
   return Boolean(side === 'back' ? product.photoBack : product.photo);
 }
+
+/**
+ * Formats any raw media URL (including legacy 'orders:...' paths) into a valid URL for <img> tags.
+ */
+export function formatMediaUrl(url?: string): string {
+  if (!url) return '';
+  if (
+    url.startsWith('data:image/') ||
+    url.startsWith('http://') ||
+    url.startsWith('https://') ||
+    url.startsWith('/')
+  ) {
+    return url;
+  }
+  if (url.startsWith('orders:')) {
+    const cleanPath = url.slice(7);
+    const base = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://aogeqovceacvhtvkwswk.supabase.co';
+    return `${base}/storage/v1/object/public/orders/${cleanPath}`;
+  }
+  return url;
+}

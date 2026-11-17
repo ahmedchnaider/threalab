@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient, createClientServer } from '@/lib/supabase-server';
-import { uploadBase64Image } from '@/lib/storage-helper';
+import { uploadBase64Image, resolveOrderMediaUrl } from '@/lib/storage-helper';
 import { newId } from '@/lib/mock-data';
 
 export async function GET(request: NextRequest) {
@@ -40,13 +40,23 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const formatted = (data || []).map((row: any) => ({
-    ...row.data,
-    id: row.id,
-    uid: row.user_id,
-    status: row.status,
-    createdAt: Number(row.created_at),
-  }));
+  const formatted = (data || []).map((row: any) => {
+    const orderData = row.data || {};
+    const orderItems = (orderData.orderItems || []).map((it: any) => ({
+      ...it,
+      mockup: resolveOrderMediaUrl(it.mockup),
+      design: resolveOrderMediaUrl(it.design),
+    }));
+
+    return {
+      ...orderData,
+      id: row.id,
+      uid: row.user_id,
+      status: row.status,
+      createdAt: Number(row.created_at),
+      orderItems,
+    };
+  });
 
   return NextResponse.json({ orders: formatted });
 }

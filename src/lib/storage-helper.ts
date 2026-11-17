@@ -33,16 +33,33 @@ export async function uploadBase64Image(
     return dataUrl;
   }
 
-  if (bucket === 'media') {
-    const { data: publicUrlData } = admin.storage.from(bucket).getPublicUrl(filePath);
-    return publicUrlData.publicUrl;
-  }
-
-  return `orders:${data.path}`;
+  const { data: publicUrlData } = admin.storage.from(bucket).getPublicUrl(filePath);
+  return publicUrlData?.publicUrl || dataUrl;
 }
 
 /**
- * Generates a signed URL for private bucket objects.
+ * Resolves any legacy 'orders:...' relative path into a direct, browser-renderable public URL.
+ */
+export function resolveOrderMediaUrl(rawUrl?: string): string {
+  if (!rawUrl) return '';
+  if (
+    rawUrl.startsWith('data:image/') ||
+    rawUrl.startsWith('http://') ||
+    rawUrl.startsWith('https://') ||
+    rawUrl.startsWith('/')
+  ) {
+    return rawUrl;
+  }
+  if (rawUrl.startsWith('orders:')) {
+    const cleanPath = rawUrl.slice(7);
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://aogeqovceacvhtvkwswk.supabase.co';
+    return `${supabaseUrl}/storage/v1/object/public/orders/${cleanPath}`;
+  }
+  return rawUrl;
+}
+
+/**
+ * Generates a signed URL for private bucket objects (or returns public URL).
  */
 export async function getSignedMediaUrl(bucket: string, filePath: string, expiresIn = 3600): Promise<string> {
   const admin = createAdminClient();
@@ -52,7 +69,7 @@ export async function getSignedMediaUrl(bucket: string, filePath: string, expire
   const { data, error } = await admin.storage.from(bucket).createSignedUrl(cleanPath, expiresIn);
 
   if (error || !data) {
-    return filePath;
+    return resolveOrderMediaUrl(filePath);
   }
 
   return data.signedUrl;
