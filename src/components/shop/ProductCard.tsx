@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { Product } from '@/lib/types';
-import { GARMENTS, svgURL } from '@/lib/garments';
+import { GARMENTS, getProductViewSrc } from '@/lib/garments';
 import { Maximize2, Sparkles } from 'lucide-react';
 
 interface ProductCardProps {
@@ -16,8 +16,7 @@ export function ProductCard({ product, currency, onZoom }: ProductCardProps) {
   const [selectedColor, setSelectedColor] = useState(product.colors[0] || '#ffffff');
   const garment = GARMENTS[product.type] || GARMENTS.tshirt;
 
-  const currentThumb =
-    product.photo || svgURL(product.type, selectedColor, 'front');
+  const currentThumb = getProductViewSrc(product, selectedColor, 'front');
 
   return (
     <article className="group bg-[#fffdf8] border-[1.5px] border-[#141414] rounded-2xl overflow-hidden flex flex-col transition-all duration-200 hover:-translate-y-1 hover:shadow-[6px_6px_0_#141414]">

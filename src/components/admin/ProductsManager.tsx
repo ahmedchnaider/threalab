@@ -2,10 +2,28 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { GarmentType, PrintArea, Product, Side } from '@/lib/types';
-import { defaultArea, GARMENTS, svgURL } from '@/lib/garments';
+import {
+  defaultArea,
+  GARMENTS,
+  getProductViewSrc,
+  hasProductPhoto,
+  cpKey,
+  svgURL,
+} from '@/lib/garments';
 import { drawBase, loadImg, readAsDataURL } from '@/lib/canvas-utils';
 import { newId } from '@/lib/mock-data';
-import { Trash2, Edit3, Plus, RotateCcw } from 'lucide-react';
+import {
+  Trash2,
+  Edit3,
+  Plus,
+  RotateCcw,
+  Upload,
+  Image as ImageIcon,
+  Check,
+  X,
+  Eye,
+  Layers,
+} from 'lucide-react';
 
 const PALETTE = [
   '#ffffff',
@@ -21,17 +39,26 @@ const PALETTE = [
   '#f2c94c',
   '#e8a7b8',
 ];
+
+const COLOR_NAMES: Record<string, string> = {
+  '#ffffff': 'Pure White',
+  '#141414': 'Onyx Black',
+  '#e9e4d8': 'Natural Sand',
+  '#c8b89a': 'Khaki Beige',
+  '#7d8b6a': 'Sage Olive',
+  '#2f4a3a': 'Forest Pine',
+  '#1f2f52': 'Navy Blue',
+  '#9aa5b1': 'Slate Grey',
+  '#8a1c1c': 'Crimson Red',
+  '#ff4d1c': 'Flame Orange',
+  '#f2c94c': 'Mustard Yellow',
+  '#e8a7b8': 'Dusty Rose',
+};
+
 const SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL'];
 
-interface ProductsManagerProps {
-  products: Product[];
-  currency: string;
-  onSave: (product: Product) => Promise<void>;
-  onDelete: (id: string) => Promise<void>;
-}
-
-export function ProductsManager({ products, currency, onSave, onDelete }: ProductsManagerProps) {
-  const [editing, setEditing] = useState<Product>(() => ({
+function createEmptyProduct(order: number): Product {
+  return {
     id: '',
     name: '',
     type: 'tshirt',
@@ -43,17 +70,30 @@ export function ProductsManager({ products, currency, onSave, onDelete }: Produc
     photo: '',
     photoBack: '',
     hasBack: true,
+    colorPhotos: {},
     area: defaultArea('tshirt', 'front', false),
     areaBack: defaultArea('tshirt', 'back', false),
     active: true,
-    order: products.length,
-  }));
+    order,
+  };
+}
+
+interface ProductsManagerProps {
+  products: Product[];
+  currency: string;
+  onSave: (product: Product) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+}
+
+export function ProductsManager({ products, currency, onSave, onDelete }: ProductsManagerProps) {
+  const [editing, setEditing] = useState<Product>(() => createEmptyProduct(products.length));
 
   const [activeSide, setActiveSide] = useState<Side>('front');
   const [activeColor, setActiveColor] = useState<string>('');
   const [baseImg, setBaseImg] = useState<HTMLImageElement | null>(null);
   const [isPhoto, setIsPhoto] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const dragRef = useRef<{
@@ -72,37 +112,31 @@ export function ProductsManager({ products, currency, onSave, onDelete }: Produc
     }
   };
 
-  // Load preview base image
+  // Keep activeColor valid
+  const currentPreviewColor =
+    activeColor && editing.colors.includes(activeColor)
+      ? activeColor
+      : editing.colors[0] || '#ffffff';
+
+  // Load preview base image for canvas whenever editing state, preview color, or side changes
   useEffect(() => {
     let canceled = false;
-    const color = activeColor || editing.colors[0] || '#ffffff';
-    const photo = activeSide === 'back' ? editing.photoBack : editing.photo;
+    const src = getProductViewSrc(editing, currentPreviewColor, activeSide);
+    const hasPhoto = hasProductPhoto(editing, currentPreviewColor, activeSide);
 
-    if (photo) {
-      loadImg(photo)
-        .then((img) => {
-          if (!canceled) {
-            setBaseImg(img);
-            setIsPhoto(true);
-          }
-        })
-        .catch(() => {});
-    } else {
-      const svg = svgURL(editing.type, color, activeSide);
-      loadImg(svg)
-        .then((img) => {
-          if (!canceled) {
-            setBaseImg(img);
-            setIsPhoto(false);
-          }
-        })
-        .catch(() => {});
-    }
+    loadImg(src)
+      .then((img) => {
+        if (!canceled) {
+          setBaseImg(img);
+          setIsPhoto(hasPhoto);
+        }
+      })
+      .catch(() => {});
 
     return () => {
       canceled = true;
     };
-  }, [editing.type, editing.colors, editing.photo, editing.photoBack, activeColor, activeSide]);
+  }, [editing, currentPreviewColor, activeSide]);
 
   // Redraw canvas
   const drawEditor = useCallback(() => {
@@ -213,11 +247,12 @@ export function ProductsManager({ products, currency, onSave, onDelete }: Produc
     } catch {}
   };
 
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Upload default shared photo (front or back)
+  const handleDefaultPhotoUpload = async (side: Side, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const dataUrl = await readAsDataURL(file);
-    if (activeSide === 'back') {
+    if (side === 'back') {
       setEditing((prev) => ({
         ...prev,
         photoBack: dataUrl,
@@ -230,10 +265,54 @@ export function ProductsManager({ products, currency, onSave, onDelete }: Produc
         area: defaultArea(prev.type, 'front', true),
       }));
     }
+    setActiveSide(side);
+    e.target.value = '';
+  };
+
+  const handleRemoveDefaultPhoto = (side: Side) => {
+    if (side === 'back') {
+      setEditing((prev) => ({ ...prev, photoBack: '' }));
+    } else {
+      setEditing((prev) => ({ ...prev, photo: '' }));
+    }
+  };
+
+  // Upload color-specific photo (front or back for a particular color)
+  const handleColorPhotoUpload = async (
+    color: string,
+    side: Side,
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const dataUrl = await readAsDataURL(file);
+    const key = cpKey(color, side);
+    setEditing((prev) => ({
+      ...prev,
+      colorPhotos: {
+        ...(prev.colorPhotos || {}),
+        [key]: dataUrl,
+      },
+    }));
+    setActiveColor(color);
+    setActiveSide(side);
+    e.target.value = '';
+  };
+
+  const handleRemoveColorPhoto = (color: string, side: Side) => {
+    const key = cpKey(color, side);
+    setEditing((prev) => {
+      const next = { ...(prev.colorPhotos || {}) };
+      delete next[key];
+      return {
+        ...prev,
+        colorPhotos: next,
+      };
+    });
   };
 
   const handleResetArea = () => {
-    const hasPh = activeSide === 'back' ? Boolean(editing.photoBack) : Boolean(editing.photo);
+    const hasPh = hasProductPhoto(editing, currentPreviewColor, activeSide);
     setArea(defaultArea(editing.type, activeSide, hasPh));
   };
 
@@ -243,155 +322,501 @@ export function ProductsManager({ products, currency, onSave, onDelete }: Produc
       alert('Select at least one color');
       return;
     }
-    const id = editing.id || newId();
-    await onSave({ ...editing, id });
-    setEditing({
-      id: '',
-      name: '',
-      type: 'tshirt',
-      price: 45,
-      printPrice: 15,
-      colors: ['#ffffff', '#141414'],
-      sizes: ['S', 'M', 'L', 'XL'],
-      description: '',
-      photo: '',
-      photoBack: '',
-      hasBack: true,
-      area: defaultArea('tshirt', 'front', false),
-      areaBack: defaultArea('tshirt', 'back', false),
-      active: true,
-      order: products.length,
-    });
+    setIsSaving(true);
+    try {
+      const id = editing.id || newId();
+      await onSave({
+        ...editing,
+        id,
+        colorPhotos: editing.colorPhotos || {},
+      });
+      setEditing(createEmptyProduct(products.length));
+    } finally {
+      setIsSaving(false);
+    }
   };
+
+  const colorPhotosCount = Object.keys(editing.colorPhotos || {}).length;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
       {/* Product Form on Left */}
-      <div className="lg:col-span-7 bg-[#fffdf8] border-[1.5px] border-[#141414] rounded-2xl p-5 sm:p-6 space-y-5">
-        <div className="flex justify-between items-center">
-          <h4 className="font-anton text-xl tracking-wide uppercase text-[#141414]">
-            {editing.id ? 'Edit Product' : 'Add New Product'}
-          </h4>
+      <div className="lg:col-span-7 bg-[#fffdf8] border-[1.5px] border-[#141414] rounded-2xl p-5 sm:p-6 space-y-6">
+        <div className="flex justify-between items-center pb-2 border-b border-[#ddd6c8]">
+          <div>
+            <h4 className="font-anton text-2xl tracking-wide uppercase text-[#141414]">
+              {editing.id ? 'Edit Product' : 'Add New Product'}
+            </h4>
+            <p className="text-xs text-[#6b665d] mt-0.5">
+              Upload garment photos, define colors, and customize print boundaries.
+            </p>
+          </div>
           {editing.id && (
             <button
               type="button"
-              onClick={() =>
-                setEditing({
-                  id: '',
-                  name: '',
-                  type: 'tshirt',
-                  price: 45,
-                  printPrice: 15,
-                  colors: ['#ffffff', '#141414'],
-                  sizes: ['S', 'M', 'L', 'XL'],
-                  description: '',
-                  photo: '',
-                  photoBack: '',
-                  hasBack: true,
-                  area: defaultArea('tshirt', 'front', false),
-                  areaBack: defaultArea('tshirt', 'back', false),
-                  active: true,
-                  order: products.length,
-                })
-              }
-              className="text-xs font-bold text-[#ff4d1c] hover:underline flex items-center gap-1"
+              onClick={() => {
+                setEditing(createEmptyProduct(products.length));
+                setActiveColor('');
+                setActiveSide('front');
+              }}
+              className="text-xs font-bold text-[#ff4d1c] hover:underline flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#ff4d1c]/30 hover:border-[#ff4d1c]"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>New</span>
+              <span>Create New</span>
             </button>
           )}
         </div>
 
-        <form onSubmit={handleSave} className="space-y-4 text-sm">
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-[#6b665d] mb-1">
-              Product Name
-            </label>
-            <input
-              type="text"
-              required
-              maxLength={80}
-              placeholder="e.g. Classic Heavy Tee"
-              value={editing.name}
-              onChange={(e) => setEditing({ ...editing, name: e.target.value })}
-              className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c]"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <form onSubmit={handleSave} className="space-y-6 text-sm">
+          {/* 1. Basic Info */}
+          <div className="space-y-4">
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-[#6b665d] mb-1">
-                Garment Type
-              </label>
-              <select
-                value={editing.type}
-                onChange={(e) => {
-                  const t = e.target.value as GarmentType;
-                  setEditing({
-                    ...editing,
-                    type: t,
-                    area: defaultArea(t, 'front', Boolean(editing.photo)),
-                    areaBack: defaultArea(t, 'back', Boolean(editing.photoBack)),
-                  });
-                }}
-                className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c]"
-              >
-                {Object.entries(GARMENTS).map(([k, g]) => (
-                  <option key={k} value={k}>
-                    {g.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-[#6b665d] mb-1">
-                Base Price ({currency})
+                Product Name
               </label>
               <input
-                type="number"
-                min="0"
-                step="0.5"
-                value={editing.price}
-                onChange={(e) => setEditing({ ...editing, price: Number(e.target.value) })}
-                className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c]"
+                type="text"
+                required
+                maxLength={80}
+                placeholder="e.g. Classic Heavyweight Street Tee"
+                value={editing.name}
+                onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+                className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c] text-sm"
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-[#6b665d] mb-1">
-                Print Fee / Side
-              </label>
-              <input
-                type="number"
-                min="0"
-                step="0.5"
-                value={editing.printPrice}
-                onChange={(e) => setEditing({ ...editing, printPrice: Number(e.target.value) })}
-                className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c]"
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#6b665d] mb-1">
+                  Garment Type
+                </label>
+                <select
+                  value={editing.type}
+                  onChange={(e) => {
+                    const t = e.target.value as GarmentType;
+                    setEditing({
+                      ...editing,
+                      type: t,
+                      area: defaultArea(t, 'front', Boolean(editing.photo)),
+                      areaBack: defaultArea(t, 'back', Boolean(editing.photoBack)),
+                    });
+                  }}
+                  className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c] text-sm"
+                >
+                  {Object.entries(GARMENTS).map(([k, g]) => (
+                    <option key={k} value={k}>
+                      {g.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#6b665d] mb-1">
+                  Base Price ({currency})
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  value={editing.price}
+                  onChange={(e) => setEditing({ ...editing, price: Number(e.target.value) })}
+                  className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c] text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#6b665d] mb-1">
+                  Print Fee / Side ({currency})
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  value={editing.printPrice}
+                  onChange={(e) => setEditing({ ...editing, printPrice: Number(e.target.value) })}
+                  className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c] text-sm"
+                />
+              </div>
             </div>
-          </div>
 
-          <label className="flex items-center gap-2 cursor-pointer pt-1">
-            <input
-              type="checkbox"
-              checked={editing.hasBack}
-              onChange={(e) => setEditing({ ...editing, hasBack: e.target.checked })}
-              className="accent-[#ff4d1c] w-4 h-4 rounded"
-            />
-            <span className="text-xs font-medium text-[#141414]">
-              Customers can also customize and print on the back
-            </span>
-          </label>
-
-          {/* Interactive Print Area Editor Canvas */}
-          <div className="border-[1.5px] border-[#ddd6c8] rounded-xl p-4 bg-white space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-xs font-bold uppercase tracking-wider text-[#6b665d]">
-                Image & Print Area Positioning
+            <label className="flex items-center gap-2 cursor-pointer pt-1">
+              <input
+                type="checkbox"
+                checked={editing.hasBack}
+                onChange={(e) => setEditing({ ...editing, hasBack: e.target.checked })}
+                className="accent-[#ff4d1c] w-4 h-4 rounded"
+              />
+              <span className="text-xs font-medium text-[#141414]">
+                Enable 2-Sided Customization (Front & Back printing)
               </span>
-              <div className="flex gap-1.5">
+            </label>
+          </div>
+
+          {/* 2. Primary / Default Product Images */}
+          <div className="border-[1.5px] border-[#141414] rounded-xl p-4 bg-white space-y-3">
+            <div className="flex justify-between items-baseline">
+              <h5 className="font-anton text-base tracking-wide uppercase text-[#141414] flex items-center gap-2">
+                <ImageIcon className="w-4 h-4 text-[#ff4d1c]" />
+                <span>Primary Garment Photos</span>
+              </h5>
+              <span className="text-[11px] text-[#6b665d]">Default store & studio images</span>
+            </div>
+            <p className="text-xs text-[#6b665d]">
+              Upload default front & back photos for this garment. If a color variation doesn't have its own custom photo, it falls back to these images.
+            </p>
+
+            <div className={`grid grid-cols-1 ${editing.hasBack ? 'sm:grid-cols-2' : ''} gap-3 pt-1`}>
+              {/* Front Image Box */}
+              <div className="border border-[#ddd6c8] rounded-xl p-3 bg-[#faf8f4] flex flex-col items-center justify-between min-h-[170px] relative">
+                <div className="w-full flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#141414] flex items-center gap-1.5">
+                    Front Photo
+                    {editing.photo ? (
+                      <span className="inline-flex items-center text-[10px] text-green-700 bg-green-100 font-bold px-1.5 py-0.5 rounded">
+                        <Check className="w-2.5 h-2.5 mr-0.5" /> Uploaded
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-[#8a8479]">Vector SVG</span>
+                    )}
+                  </span>
+                  {editing.photo && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveDefaultPhoto('front')}
+                      className="text-xs text-[#b3261e] hover:underline flex items-center gap-0.5"
+                      title="Remove front photo"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span>Remove</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="w-full flex-1 flex items-center justify-center p-2">
+                  {editing.photo ? (
+                    <img
+                      src={editing.photo}
+                      alt="Front preview"
+                      className="max-h-24 max-w-full object-contain rounded border border-[#ddd6c8] bg-white p-1"
+                    />
+                  ) : (
+                    <div className="text-center text-[#8a8479] text-xs py-3 flex flex-col items-center gap-1">
+                      <Upload className="w-6 h-6 text-[#c4bdae]" />
+                      <span>No front photo uploaded</span>
+                    </div>
+                  )}
+                </div>
+
+                <label className="w-full mt-2 cursor-pointer bg-white hover:bg-[#141414] text-[#141414] hover:text-white border border-[#141414] py-1.5 px-3 rounded-lg text-xs font-bold text-center transition-colors flex items-center justify-center gap-1.5">
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>{editing.photo ? 'Change Front Photo' : 'Upload Front Photo'}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    hidden
+                    onChange={(e) => handleDefaultPhotoUpload('front', e)}
+                  />
+                </label>
+              </div>
+
+              {/* Back Image Box */}
+              {editing.hasBack && (
+                <div className="border border-[#ddd6c8] rounded-xl p-3 bg-[#faf8f4] flex flex-col items-center justify-between min-h-[170px] relative">
+                  <div className="w-full flex justify-between items-center mb-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#141414] flex items-center gap-1.5">
+                      Back Photo
+                      {editing.photoBack ? (
+                        <span className="inline-flex items-center text-[10px] text-green-700 bg-green-100 font-bold px-1.5 py-0.5 rounded">
+                          <Check className="w-2.5 h-2.5 mr-0.5" /> Uploaded
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-[#8a8479]">Vector SVG</span>
+                      )}
+                    </span>
+                    {editing.photoBack && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveDefaultPhoto('back')}
+                        className="text-xs text-[#b3261e] hover:underline flex items-center gap-0.5"
+                        title="Remove back photo"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Remove</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="w-full flex-1 flex items-center justify-center p-2">
+                    {editing.photoBack ? (
+                      <img
+                        src={editing.photoBack}
+                        alt="Back preview"
+                        className="max-h-24 max-w-full object-contain rounded border border-[#ddd6c8] bg-white p-1"
+                      />
+                    ) : (
+                      <div className="text-center text-[#8a8479] text-xs py-3 flex flex-col items-center gap-1">
+                        <Upload className="w-6 h-6 text-[#c4bdae]" />
+                        <span>No back photo uploaded</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <label className="w-full mt-2 cursor-pointer bg-white hover:bg-[#141414] text-[#141414] hover:text-white border border-[#141414] py-1.5 px-3 rounded-lg text-xs font-bold text-center transition-colors flex items-center justify-center gap-1.5">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>{editing.photoBack ? 'Change Back Photo' : 'Upload Back Photo'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      hidden
+                      onChange={(e) => handleDefaultPhotoUpload('back', e)}
+                    />
+                  </label>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 3. Available Colors & Color-Specific Uploads */}
+          <div className="border-[1.5px] border-[#141414] rounded-xl p-4 bg-white space-y-4">
+            <div className="flex justify-between items-baseline">
+              <h5 className="font-anton text-base tracking-wide uppercase text-[#141414] flex items-center gap-2">
+                <Layers className="w-4 h-4 text-[#ff4d1c]" />
+                <span>Colors & Per-Color Images</span>
+              </h5>
+              <span className="text-[11px] font-bold text-[#ff4d1c]">
+                {editing.colors.length} selected · {colorPhotosCount} custom photo{colorPhotosCount === 1 ? '' : 's'}
+              </span>
+            </div>
+
+            {/* Palette Multi-select */}
+            <div>
+              <span className="block text-xs font-bold uppercase tracking-wider text-[#6b665d] mb-2">
+                Select Available Palette:
+              </span>
+              <div className="flex gap-2 flex-wrap items-center">
+                {PALETTE.map((c) => {
+                  const isSelected = editing.colors.includes(c);
+                  return (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => {
+                        const updated = isSelected
+                          ? editing.colors.filter((x) => x !== c)
+                          : [...editing.colors, c];
+                        setEditing({ ...editing, colors: updated });
+                        if (isSelected && activeColor === c) {
+                          setActiveColor(updated[0] || '');
+                        }
+                      }}
+                      className={`w-7 h-7 rounded-full border border-black/25 transition-all relative ${
+                        isSelected ? 'ring-2 ring-[#ff4d1c] ring-offset-2 scale-110 shadow-sm' : 'opacity-70 hover:opacity-100 hover:scale-105'
+                      }`}
+                      style={{ backgroundColor: c }}
+                      title={`${COLOR_NAMES[c] || c} (${isSelected ? 'Selected' : 'Click to add'})`}
+                    >
+                      {isSelected && (
+                        <Check
+                          className={`w-3.5 h-3.5 absolute inset-0 m-auto ${
+                            c === '#ffffff' || c === '#e9e4d8' || c === '#f2c94c' || c === '#e8a7b8'
+                              ? 'text-[#141414]'
+                              : 'text-white'
+                          }`}
+                        />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* List of Selected Colors with Upload Slots */}
+            <div className="space-y-3 pt-2">
+              <span className="block text-xs font-bold uppercase tracking-wider text-[#6b665d]">
+                Upload Dedicated Images for Each Color:
+              </span>
+
+              {editing.colors.length === 0 ? (
+                <p className="text-xs text-[#b3261e] italic">Please select at least one color above.</p>
+              ) : (
+                <div className="space-y-3 max-h-[460px] overflow-y-auto pr-1">
+                  {editing.colors.map((c) => {
+                    const frontKey = cpKey(c, 'front');
+                    const backKey = cpKey(c, 'back');
+                    const frontImg = editing.colorPhotos?.[frontKey];
+                    const backImg = editing.colorPhotos?.[backKey];
+                    const isActive = currentPreviewColor === c;
+
+                    return (
+                      <div
+                        key={c}
+                        className={`border rounded-xl p-3 transition-all ${
+                          isActive
+                            ? 'border-[#ff4d1c] bg-[#fffaf5] shadow-xs'
+                            : 'border-[#ddd6c8] bg-[#faf8f4] hover:border-[#aaa]'
+                        }`}
+                      >
+                        {/* Header for this color swatch */}
+                        <div className="flex justify-between items-center mb-2.5 pb-2 border-b border-[#ece7de]">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="w-5 h-5 rounded-full border border-black/25 shrink-0"
+                              style={{ backgroundColor: c }}
+                            />
+                            <span className="font-bold text-xs text-[#141414]">
+                              {COLOR_NAMES[c] || c}
+                            </span>
+                            <span className="text-[10px] text-[#6b665d] uppercase">({c})</span>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => setActiveColor(c)}
+                            className={`text-xs px-2.5 py-1 rounded-md font-bold flex items-center gap-1 transition-colors ${
+                              isActive
+                                ? 'bg-[#ff4d1c] text-white'
+                                : 'bg-white border border-[#ddd6c8] text-[#141414] hover:bg-[#141414] hover:text-white'
+                            }`}
+                            title="Preview this color in the interactive canvas"
+                          >
+                            <Eye className="w-3 h-3" />
+                            <span>{isActive ? 'Previewing' : 'Preview'}</span>
+                          </button>
+                        </div>
+
+                        {/* Upload Slots for Front and Back of this color */}
+                        <div className={`grid grid-cols-1 ${editing.hasBack ? 'sm:grid-cols-2' : ''} gap-2.5`}>
+                          {/* Front Slot for this Color */}
+                          <div className="border border-[#e2dcd2] rounded-lg p-2 bg-white flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              {frontImg ? (
+                                <img
+                                  src={frontImg}
+                                  alt=""
+                                  className="w-10 h-10 object-contain rounded bg-[#faf8f4] border border-[#ddd6c8] shrink-0"
+                                />
+                              ) : (
+                                <div className="w-10 h-10 rounded bg-[#ebe6dc] border border-[#ddd6c8] flex items-center justify-center shrink-0 text-[#8a8479]">
+                                  <ImageIcon className="w-4 h-4" />
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <div className="text-[11px] font-bold text-[#141414] truncate">
+                                  Front View
+                                </div>
+                                <div className="text-[10px] text-[#6b665d]">
+                                  {frontImg ? (
+                                    <span className="text-green-700 font-semibold">Custom photo</span>
+                                  ) : editing.photo ? (
+                                    <span>Uses default photo</span>
+                                  ) : (
+                                    <span>Vector SVG</span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1 shrink-0">
+                              <label className="cursor-pointer bg-[#faf8f4] hover:bg-[#141414] text-[#141414] hover:text-white border border-[#ddd6c8] px-2 py-1 rounded text-[11px] font-bold transition-colors">
+                                <span>{frontImg ? 'Change' : 'Upload'}</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  hidden
+                                  onChange={(e) => handleColorPhotoUpload(c, 'front', e)}
+                                />
+                              </label>
+                              {frontImg && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveColorPhoto(c, 'front')}
+                                  className="p-1 text-[#b3261e] hover:bg-red-50 rounded"
+                                  title="Remove custom front photo for this color"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Back Slot for this Color */}
+                          {editing.hasBack && (
+                            <div className="border border-[#e2dcd2] rounded-lg p-2 bg-white flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                {backImg ? (
+                                  <img
+                                    src={backImg}
+                                    alt=""
+                                    className="w-10 h-10 object-contain rounded bg-[#faf8f4] border border-[#ddd6c8] shrink-0"
+                                  />
+                                ) : (
+                                  <div className="w-10 h-10 rounded bg-[#ebe6dc] border border-[#ddd6c8] flex items-center justify-center shrink-0 text-[#8a8479]">
+                                    <ImageIcon className="w-4 h-4" />
+                                  </div>
+                                )}
+                                <div className="min-w-0">
+                                  <div className="text-[11px] font-bold text-[#141414] truncate">
+                                    Back View
+                                  </div>
+                                  <div className="text-[10px] text-[#6b665d]">
+                                    {backImg ? (
+                                      <span className="text-green-700 font-semibold">Custom photo</span>
+                                    ) : editing.photoBack ? (
+                                      <span>Uses default photo</span>
+                                    ) : (
+                                      <span>Vector SVG</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1 shrink-0">
+                                <label className="cursor-pointer bg-[#faf8f4] hover:bg-[#141414] text-[#141414] hover:text-white border border-[#ddd6c8] px-2 py-1 rounded text-[11px] font-bold transition-colors">
+                                  <span>{backImg ? 'Change' : 'Upload'}</span>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    hidden
+                                    onChange={(e) => handleColorPhotoUpload(c, 'back', e)}
+                                  />
+                                </label>
+                                {backImg && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveColorPhoto(c, 'back')}
+                                    className="p-1 text-[#b3261e] hover:bg-red-50 rounded"
+                                    title="Remove custom back photo for this color"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 4. Interactive Print Area Editor Canvas */}
+          <div className="border-[1.5px] border-[#ddd6c8] rounded-xl p-4 bg-white space-y-3">
+            <div className="flex justify-between items-center flex-wrap gap-2">
+              <div>
+                <span className="text-xs font-bold uppercase tracking-wider text-[#6b665d] block">
+                  Print Area Positioning & Preview
+                </span>
+                <span className="text-[11px] text-[#8a8479]">
+                  Previewing: <strong className="text-[#141414]">{COLOR_NAMES[currentPreviewColor] || currentPreviewColor}</strong> ({activeSide})
+                </span>
+              </div>
+
+              {/* Side toggle */}
+              <div className="flex gap-1.5 items-center">
                 <button
                   type="button"
                   onClick={() => setActiveSide('front')}
@@ -418,6 +843,27 @@ export function ProductsManager({ products, currency, onSave, onDelete }: Produc
                 )}
               </div>
             </div>
+
+            {/* Color Swatch Quick Selector on Canvas */}
+            {editing.colors.length > 1 && (
+              <div className="flex items-center gap-1.5 overflow-x-auto py-1">
+                <span className="text-[10px] uppercase font-bold text-[#8a8479] shrink-0 mr-1">
+                  Preview Color:
+                </span>
+                {editing.colors.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setActiveColor(c)}
+                    className={`w-5 h-5 rounded-full border border-black/25 shrink-0 transition-transform ${
+                      currentPreviewColor === c ? 'ring-2 ring-[#ff4d1c] ring-offset-1 scale-110' : 'hover:scale-105'
+                    }`}
+                    style={{ backgroundColor: c }}
+                    title={COLOR_NAMES[c] || c}
+                  />
+                ))}
+              </div>
+            )}
 
             <canvas
               ref={canvasRef}
@@ -474,55 +920,22 @@ export function ProductsManager({ products, currency, onSave, onDelete }: Produc
               </div>
             </div>
 
-            <div className="flex justify-between items-center pt-2">
-              <label className="cursor-pointer text-xs font-bold text-[#ff4d1c] hover:underline flex items-center gap-1">
-                <span>Upload {activeSide} photo</span>
-                <input type="file" accept="image/*" hidden onChange={handlePhotoUpload} />
-              </label>
-
+            <div className="flex justify-end items-center pt-2">
               <button
                 type="button"
                 onClick={handleResetArea}
                 className="text-xs text-[#6b665d] hover:text-black flex items-center gap-1"
               >
                 <RotateCcw className="w-3 h-3" />
-                <span>Reset box</span>
+                <span>Reset box to default</span>
               </button>
             </div>
           </div>
 
-          {/* Available Colors */}
+          {/* 5. Sizes */}
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-[#6b665d] mb-1.5">
-              Available Colors
-            </label>
-            <div className="flex gap-2 flex-wrap items-center">
-              {PALETTE.map((c) => {
-                const isSelected = editing.colors.includes(c);
-                return (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => {
-                      const updated = isSelected
-                        ? editing.colors.filter((x) => x !== c)
-                        : [...editing.colors, c];
-                      setEditing({ ...editing, colors: updated });
-                    }}
-                    className={`w-7 h-7 rounded-full border border-black/20 transition-all ${
-                      isSelected ? 'ring-2 ring-[#141414] ring-offset-2 scale-110' : ''
-                    }`}
-                    style={{ backgroundColor: c }}
-                  />
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Sizes */}
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-[#6b665d] mb-1.5">
-              Sizes
+              Available Sizes
             </label>
             <div className="flex gap-1.5 flex-wrap">
               {SIZES.map((s) => {
@@ -550,6 +963,7 @@ export function ProductsManager({ products, currency, onSave, onDelete }: Produc
             </div>
           </div>
 
+          {/* 6. Description */}
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-[#6b665d] mb-1">
               Description
@@ -557,12 +971,14 @@ export function ProductsManager({ products, currency, onSave, onDelete }: Produc
             <textarea
               rows={2}
               maxLength={600}
+              placeholder="Garment details, fabric GSM, cut & fit instructions..."
               value={editing.description}
               onChange={(e) => setEditing({ ...editing, description: e.target.value })}
-              className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c]"
+              className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c] text-sm"
             />
           </div>
 
+          {/* 7. Catalog Visibility */}
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
@@ -573,25 +989,35 @@ export function ProductsManager({ products, currency, onSave, onDelete }: Produc
             <span className="text-xs font-medium text-[#141414]">Visible in store catalog</span>
           </label>
 
+          {/* 8. Save Button */}
           <button
             type="submit"
-            className="w-full bg-[#141414] hover:bg-[#ff4d1c] text-[#f4f1ea] border-[1.5px] border-[#141414] hover:border-[#ff4d1c] py-3 rounded-full font-bold text-sm transition-colors"
+            disabled={isSaving}
+            className="w-full bg-[#141414] hover:bg-[#ff4d1c] text-[#f4f1ea] border-[1.5px] border-[#141414] hover:border-[#ff4d1c] py-3 rounded-full font-bold text-sm transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
           >
-            {editing.id ? 'Save Changes' : 'Create Product'}
+            {isSaving ? (
+              <span>Saving Product...</span>
+            ) : (
+              <span>{editing.id ? 'Save Changes' : 'Create Product'}</span>
+            )}
           </button>
         </form>
       </div>
 
       {/* Product List on Right */}
       <div className="lg:col-span-5 space-y-4">
-        <h4 className="font-anton text-lg tracking-wide uppercase text-[#141414]">
-          Products ({products.length})
-        </h4>
+        <div className="flex justify-between items-baseline">
+          <h4 className="font-anton text-lg tracking-wide uppercase text-[#141414]">
+            Products ({products.length})
+          </h4>
+          <span className="text-xs text-[#6b665d]">Click edit to modify</span>
+        </div>
 
         <div className="space-y-3">
           {products.map((p) => {
-            const thumb = p.photo || svgURL(p.type, p.colors[0] || '#ffffff', 'front');
+            const thumb = getProductViewSrc(p, p.colors[0], 'front');
             const garment = GARMENTS[p.type] || GARMENTS.tshirt;
+            const customPhotosCount = Object.keys(p.colorPhotos || {}).length;
 
             return (
               <div
@@ -601,7 +1027,7 @@ export function ProductsManager({ products, currency, onSave, onDelete }: Produc
                 <img
                   src={thumb}
                   alt=""
-                  className="w-14 h-16 object-contain bg-[#ebe6dc] rounded-lg p-1 border border-[#ddd6c8]"
+                  className="w-14 h-16 object-contain bg-[#ebe6dc] rounded-lg p-1 border border-[#ddd6c8] shrink-0"
                 />
 
                 <div className="flex-1 min-w-0">
@@ -612,12 +1038,36 @@ export function ProductsManager({ products, currency, onSave, onDelete }: Produc
                   <div className="text-xs text-[#6b665d] truncate">
                     {garment.label} · {p.price} {currency} · {p.hasBack ? 'Front & Back' : 'Front'}
                   </div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className="flex items-center gap-1">
+                      {p.colors.slice(0, 5).map((c) => (
+                        <span
+                          key={c}
+                          className="w-3 h-3 rounded-full border border-black/20"
+                          style={{ backgroundColor: c }}
+                        />
+                      ))}
+                      {p.colors.length > 5 && (
+                        <span className="text-[10px] text-[#6b665d]">+{p.colors.length - 5}</span>
+                      )}
+                    </div>
+                    {customPhotosCount > 0 && (
+                      <span className="text-[10px] font-bold text-[#ff4d1c] bg-[#fff0ea] px-1.5 py-0.5 rounded">
+                        {customPhotosCount} color photo{customPhotosCount === 1 ? '' : 's'}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 shrink-0">
                   <button
                     onClick={() => {
-                      setEditing(p);
+                      setEditing({
+                        ...p,
+                        colorPhotos: p.colorPhotos || {},
+                      });
+                      setActiveColor(p.colors[0] || '');
+                      setActiveSide('front');
                       window.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
                     className="p-1.5 rounded-lg border border-[#141414] hover:bg-[#141414] hover:text-white transition-colors"

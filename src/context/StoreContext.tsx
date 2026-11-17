@@ -91,11 +91,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('tl_products', JSON.stringify(updated));
 
     try {
-      await fetch('/api/products', {
+      const res = await fetch('/api/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(p),
       });
+      const data = await res.json();
+      if (data?.product) {
+        setProducts((prev) => {
+          const synced = prev.map((x) => (x.id === data.product.id ? data.product : x));
+          localStorage.setItem('tl_products', JSON.stringify(synced));
+          return synced;
+        });
+      }
     } catch {
       // Offline fallback
     }

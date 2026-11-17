@@ -54,7 +54,7 @@ export interface Product {
   photo?: string;
   photoBack?: string;
   hasBack: boolean;
-  colorPhotos?: Record<string, number | string>; // key: `${hexClean}-${side}` => timestamp or url
+  colorPhotos?: Record<string, string>; // key: `${hexClean}-${side}` => base64 dataUrl or storage URL
   area: PrintArea;
   areaBack: PrintArea;
   active: boolean;

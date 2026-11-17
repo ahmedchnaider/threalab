@@ -5,7 +5,7 @@ import { useStore } from '@/context/StoreContext';
 import { ProductCard } from '@/components/shop/ProductCard';
 import { Lightbox } from '@/components/Lightbox';
 import { LightboxItem, Product } from '@/lib/types';
-import { svgURL } from '@/lib/garments';
+import { getProductViewSrc } from '@/lib/garments';
 import Link from 'next/link';
 
 export default function ShopPage() {
@@ -21,14 +21,14 @@ export default function ShopPage() {
   const handleZoom = (product: Product, color: string) => {
     const items: LightboxItem[] = [
       {
-        src: product.photo || svgURL(product.type, color, 'front'),
+        src: getProductViewSrc(product, color, 'front'),
         label: 'Front View',
       },
     ];
 
     if (product.hasBack) {
       items.push({
-        src: product.photoBack || svgURL(product.type, color, 'back'),
+        src: getProductViewSrc(product, color, 'back'),
         label: 'Back View',
       });
     }

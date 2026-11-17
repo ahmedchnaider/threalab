@@ -6,7 +6,7 @@ import { useStore } from '@/context/StoreContext';
 import { useCart } from '@/context/CartContext';
 import { useToast } from '@/context/ToastContext';
 import { Layer, Product, Side, TextLayer, ImageLayer } from '@/lib/types';
-import { GARMENTS, svgURL } from '@/lib/garments';
+import { GARMENTS, getProductViewSrc, hasProductPhoto } from '@/lib/garments';
 import {
   ensureFont,
   exportDesign,
@@ -80,8 +80,8 @@ function StudioContent() {
     let canceled = false;
 
     const loadBases = async () => {
-      const frontSrc = product.photo || svgURL(product.type, color, 'front');
-      const backSrc = product.photoBack || svgURL(product.type, color, 'back');
+      const frontSrc = getProductViewSrc(product, color, 'front');
+      const backSrc = getProductViewSrc(product, color, 'back');
 
       try {
         const [frontImg, backImg] = await Promise.all([
@@ -111,7 +111,7 @@ function StudioContent() {
           layersBySide.front,
           product.area,
           baseImages.front,
-          Boolean(product.photo),
+          hasProductPhoto(product, color, 'front'),
           layerImages
         ),
         label: 'Front Custom View',
@@ -123,14 +123,14 @@ function StudioContent() {
           layersBySide.back,
           product.areaBack,
           baseImages.back,
-          Boolean(product.photoBack),
+          hasProductPhoto(product, color, 'back'),
           layerImages
         ),
         label: 'Back Custom View',
       });
     }
     return items;
-  }, [layersBySide, product, baseImages, layerImages]);
+  }, [layersBySide, product, color, baseImages, layerImages]);
 
   // Loading state (AFTER all hooks)
   if (!product) {
@@ -144,7 +144,7 @@ function StudioContent() {
   const currentArea = side === 'back' ? product.areaBack : product.area;
   const currentLayers = layersBySide[side];
   const activeBaseImg = baseImages[side];
-  const isBasePhoto = Boolean(side === 'back' ? product.photoBack : product.photo);
+  const isBasePhoto = hasProductPhoto(product, color, side);
 
   // Layer Management
   const handleUpdateLayer = (idx: number, updates: Partial<Layer>) => {
@@ -270,7 +270,7 @@ function StudioContent() {
         layersBySide.front,
         product.area,
         baseImages.front,
-        Boolean(product.photo),
+        hasProductPhoto(product, color, 'front'),
         layerImages
       );
       const frontDesign = exportDesign(layersBySide.front, product.area, layerImages);
@@ -282,7 +282,7 @@ function StudioContent() {
           layersBySide.back,
           product.areaBack,
           baseImages.back,
-          Boolean(product.photoBack),
+          hasProductPhoto(product, color, 'back'),
           layerImages
         );
         backDesign = exportDesign(layersBySide.back, product.areaBack, layerImages);

@@ -48,6 +48,20 @@ export async function POST(request: NextRequest) {
       rest.photoBack = await uploadBase64Image('media', `products/${id}/back.jpg`, rest.photoBack);
     }
 
+    // Upload color-specific photos if present
+    if (rest.colorPhotos && typeof rest.colorPhotos === 'object') {
+      const updatedColorPhotos: Record<string, string> = {};
+      for (const [key, val] of Object.entries(rest.colorPhotos)) {
+        if (typeof val === 'string' && val.startsWith('data:image/')) {
+          const uploadedUrl = await uploadBase64Image('media', `products/${id}/${key}.jpg`, val);
+          updatedColorPhotos[key] = uploadedUrl;
+        } else if (typeof val === 'string' && val) {
+          updatedColorPhotos[key] = val;
+        }
+      }
+      rest.colorPhotos = updatedColorPhotos;
+    }
+
     const cleanProduct = {
       id,
       ...rest,

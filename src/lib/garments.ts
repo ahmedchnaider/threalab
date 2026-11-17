@@ -1,4 +1,4 @@
-import { GarmentConfig, GarmentType, PrintArea, Side } from './types';
+import { GarmentConfig, GarmentType, PrintArea, Product, Side } from './types';
 
 export const GARMENTS: Record<GarmentType, GarmentConfig> = {
   tshirt: {
@@ -132,4 +132,55 @@ export function clampArea(a: Partial<PrintArea> | undefined, def: PrintArea): Pr
   x = Math.min(600 - w, Math.max(0, x));
   y = Math.min(700 - h, Math.max(0, y));
   return { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) };
+}
+
+/**
+ * Returns a normalized key for color-specific photos: e.g. "ffffff-front", "141414-back"
+ */
+export function cpKey(color: string, side: Side = 'front'): string {
+  const clean = (color || '').replace(/^#/, '').toLowerCase().trim();
+  return `${clean}-${side}`;
+}
+
+/**
+ * Resolves the image source for a product, checking in priority:
+ * 1. Specific photo for this color & side in `product.colorPhotos`
+ * 2. Shared default `photoBack` or `photo`
+ * 3. Dynamic garment SVG vector
+ */
+export function getProductViewSrc(
+  product: Product,
+  color?: string,
+  side: Side = 'front'
+): string {
+  if (color && product.colorPhotos) {
+    const key = cpKey(color, side);
+    const specific = product.colorPhotos[key];
+    if (typeof specific === 'string' && specific) {
+      return specific;
+    }
+  }
+
+  const defaultPhoto = side === 'back' ? product.photoBack : product.photo;
+  if (defaultPhoto) {
+    return defaultPhoto;
+  }
+
+  const fallbackColor = color || product.colors?.[0] || '#ffffff';
+  return svgURL(product.type, fallbackColor, side);
+}
+
+/**
+ * Checks whether a real photo (either color-specific or shared default) exists for this product & side.
+ */
+export function hasProductPhoto(
+  product: Product,
+  color?: string,
+  side: Side = 'front'
+): boolean {
+  if (color && product.colorPhotos) {
+    const key = cpKey(color, side);
+    if (product.colorPhotos[key]) return true;
+  }
+  return Boolean(side === 'back' ? product.photoBack : product.photo);
 }
