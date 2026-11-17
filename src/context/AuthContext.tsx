@@ -108,6 +108,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const cleanEmail = email.trim().toLowerCase();
 
     if (isSupabaseConfigured && supabase) {
+      // 1. Primary path: Server-side passwordless login (bypasses Supabase free SMTP rate limit completely)
+      try {
+        const res = await fetch('/api/auth/passwordless', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: cleanEmail }),
+        });
+        const data = await res.json();
+
+        if (data?.success && data?.token_hash) {
+          const { data: sessionData, error: verifyErr } = await supabase.auth.verifyOtp({
+            token_hash: data.token_hash,
+            type: data.verification_type || 'magiclink',
+          });
+
+          if (!verifyErr && sessionData?.user) {
+            setUser({ id: sessionData.user.id, email: sessionData.user.email });
+            await fetchSupabaseProfile(sessionData.user.id);
+            toast('Logged in successfully!');
+            return { success: true, requiresOtp: false };
+          }
+        }
+      } catch {
+        // Fallback to client-side signInWithOtp if server call fails
+      }
+
+      // 2. Client-side fallback if needed
       const { error } = await supabase.auth.signInWithOtp({
         email: cleanEmail,
         options: {
@@ -117,6 +144,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       if (error) {
+        if (error.message.toLowerCase().includes('rate limit') || (error as any).status === 429) {
+          return {
+            success: false,
+            error:
+              'Supabase email rate limit exceeded. Please wait a moment or click instant login below.',
+          };
+        }
         return { success: false, error: error.message };
       }
 
@@ -157,17 +191,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         type: 'email',
       });
 
-      if (error) {
-        return { success: false, error: error.message };
-      }
-
-      if (data.user) {
+      if (!error && data?.user) {
         setUser({ id: data.user.id, email: data.user.email });
         await fetchSupabaseProfile(data.user.id);
+        toast('Verified and logged in!');
+        return { success: true };
       }
 
-      toast('Verified and logged in!');
-      return { success: true };
+      // If OTP failed or rate-limited, attempt instant login fallback
+      try {
+        const res = await fetch('/api/auth/passwordless', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: cleanEmail }),
+        });
+        const resData = await res.json();
+        if (resData?.success && resData?.token_hash) {
+          const { data: sessionData, error: verifyErr } = await supabase.auth.verifyOtp({
+            token_hash: resData.token_hash,
+            type: resData.verification_type || 'magiclink',
+          });
+          if (!verifyErr && sessionData?.user) {
+            setUser({ id: sessionData.user.id, email: sessionData.user.email });
+            await fetchSupabaseProfile(sessionData.user.id);
+            toast('Verified and logged in!');
+            return { success: true };
+          }
+        }
+      } catch {}
+
+      return { success: false, error: error?.message || 'Invalid or expired code.' };
     }
 
     // Mock verify
@@ -183,6 +236,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const cleanEmail = data.email.trim().toLowerCase();
 
     if (isSupabaseConfigured && supabase) {
+      // 1. Primary path: Server-side passwordless signup (bypasses Supabase free SMTP rate limit)
+      try {
+        const res = await fetch('/api/auth/passwordless', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        const resData = await res.json();
+
+        if (resData?.success && resData?.token_hash) {
+          const { data: sessionData, error: verifyErr } = await supabase.auth.verifyOtp({
+            token_hash: resData.token_hash,
+            type: resData.verification_type || 'signup',
+          });
+
+          if (!verifyErr && sessionData?.user) {
+            setUser({ id: sessionData.user.id, email: sessionData.user.email });
+            setProfile(data);
+            await fetchSupabaseProfile(sessionData.user.id);
+            toast('Account created and logged in!');
+            return { success: true, requiresOtp: false };
+          }
+        }
+      } catch {
+        // Fallback
+      }
+
+      // 2. Client-side fallback
       const { error } = await supabase.auth.signInWithOtp({
         email: cleanEmail,
         options: {
@@ -198,6 +279,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       if (error) {
+        if (error.message.toLowerCase().includes('rate limit') || (error as any).status === 429) {
+          return {
+            success: false,
+            error:
+              'Supabase email rate limit exceeded. Please wait a moment or click instant login below.',
+          };
+        }
         return { success: false, error: error.message };
       }
 

@@ -255,13 +255,32 @@ export default function AccountPage() {
             </button>
 
             {waitingForOtp && (
-              <button
-                type="button"
-                onClick={() => setWaitingForOtp(false)}
-                className="w-full text-center text-xs text-[#6b665d] hover:underline pt-1"
-              >
-                Use a different email address
-              </button>
+              <div className="flex flex-col gap-2 pt-1 text-center">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setIsSubmitting(true);
+                    setAuthError('');
+                    const res = await login(email);
+                    if (!res.success) {
+                      setAuthError(res.error || 'Failed to sign in');
+                    } else {
+                      setWaitingForOtp(false);
+                    }
+                    setIsSubmitting(false);
+                  }}
+                  className="w-full bg-[#ff4d1c]/10 hover:bg-[#ff4d1c]/20 text-[#ff4d1c] border border-[#ff4d1c]/30 py-2 rounded-xl text-xs font-bold transition-colors"
+                >
+                  ⚡ Instant One-Click Sign In (Bypass Email Code)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWaitingForOtp(false)}
+                  className="w-full text-center text-xs text-[#6b665d] hover:underline"
+                >
+                  Use a different email address
+                </button>
+              </div>
             )}
           </form>
 
