@@ -41,10 +41,6 @@ export function Header() {
             Shop
           </Link>
 
-          <Link href="/studio" className={navClasses('/studio')}>
-            Studio
-          </Link>
-
           <Link href="/account" className={navClasses('/account')}>
             <User className="w-4 h-4" />
             <span className="hidden sm:inline">

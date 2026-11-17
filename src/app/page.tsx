@@ -79,12 +79,6 @@ export default function ShopPage() {
           <h2 className="font-anton text-2xl sm:text-3xl uppercase tracking-wide text-[#141414]">
             Collection ({activeProducts.length})
           </h2>
-          <Link
-            href="/studio"
-            className="text-xs font-bold text-[#ff4d1c] hover:underline"
-          >
-            Open blank studio →
-          </Link>
         </div>
 
         {isLoading ? (
