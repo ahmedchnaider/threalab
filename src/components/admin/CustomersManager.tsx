@@ -20,7 +20,7 @@ interface CustomerStat {
 interface CustomersManagerProps {
   orders: Order[];
   currency: string;
-  onDeleteCustomer?: (email: string) => Promise<void>;
+  onDeleteCustomer?: (customer: CustomerStat) => Promise<void>;
   onDeleteCustomerOrders?: (email: string) => Promise<void>;
 }
 
@@ -56,19 +56,18 @@ export function CustomersManager({
     const key = (customer.email && customer.email !== 'No email' ? customer.email : customer.phone) || 'anon';
     setIsDeletingId(key);
     try {
-      const emailToSend = customer.email && customer.email !== 'No email' ? customer.email : '';
-
       if (onDeleteCustomer) {
-        await onDeleteCustomer(emailToSend);
+        await onDeleteCustomer(customer);
       } else if (onDeleteCustomerOrders) {
-        await onDeleteCustomerOrders(emailToSend);
+        await onDeleteCustomerOrders(customer.email);
       }
       setDbProfiles((prev) =>
         prev.filter((p) => {
           const pEmail = (p.email || '').trim().toLowerCase();
           const pPhone = (p.phone || '').trim();
-          if (emailToSend && pEmail && pEmail === emailToSend.toLowerCase()) return false;
-          if (customer.phone && pPhone && pPhone === customer.phone) return false;
+          const cEmail = (customer.email || '').trim().toLowerCase();
+          if (cEmail && cEmail !== 'no email' && pEmail === cEmail) return false;
+          if (customer.phone && customer.phone !== 'no phone' && pPhone === customer.phone) return false;
           return true;
         })
       );

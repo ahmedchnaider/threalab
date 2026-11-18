@@ -22,7 +22,7 @@ export default function AccountPage() {
     deleteAccount,
     isLoading,
   } = useAuth();
-  const { orders, settings, cancelOrder } = useStore();
+  const { orders, settings, cancelOrder, deleteOrders } = useStore();
   const { toast } = useToast();
 
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
@@ -55,7 +55,15 @@ export default function AccountPage() {
   const handleDeleteMyAccount = async () => {
     setIsDeletingMyAccount(true);
     try {
-      await deleteAccount(profileForm.email || user?.email);
+      const cleanEmail = (profileForm.email || user?.email || profile?.email || '').trim().toLowerCase();
+      const cleanPhone = (profileForm.phone || profile?.phone || '').trim();
+      const targetOrderIds = myOrders.map((o) => o.id);
+
+      if (targetOrderIds.length > 0) {
+        await deleteOrders(targetOrderIds);
+      }
+
+      await deleteAccount(cleanEmail, targetOrderIds, cleanPhone);
     } finally {
       setIsDeletingMyAccount(false);
       setConfirmDeleteMyAccount(false);

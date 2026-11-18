@@ -224,10 +224,17 @@ export async function DELETE(request: NextRequest) {
     const email = searchParams.get('email')?.trim().toLowerCase();
     const userId = searchParams.get('userId')?.trim();
     const phone = searchParams.get('phone')?.trim();
+    const orderIdsParam = searchParams.get('orderIds');
+    const orderIds = orderIdsParam
+      ? orderIdsParam
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
 
-    if (!email && !userId && !phone) {
+    if (!email && !userId && !phone && orderIds.length === 0) {
       return NextResponse.json(
-        { error: 'Email, userId, or phone is required to delete customer account' },
+        { error: 'Email, userId, phone, or orderIds are required to delete customer account' },
         { status: 400 }
       );
     }
@@ -291,11 +298,64 @@ export async function DELETE(request: NextRequest) {
       await admin.from('profiles').delete().eq('phone', phone);
     }
 
-    // 5. Detach user_id on existing orders so customer orders are preserved
+    // 5. Purge customer orders, order items, and storage mockups
+    const purgedOrderIds = new Set<string>();
+    const purgeOrder = async (orderId: string, orderUserId?: string | null) => {
+      if (purgedOrderIds.has(orderId)) return;
+      purgedOrderIds.add(orderId);
+
+      try {
+        let uid = orderUserId;
+        if (!uid) {
+          const { data: ord } = await admin.from('orders').select('user_id').eq('id', orderId).maybeSingle();
+          uid = ord?.user_id || null;
+        }
+        if (uid) {
+          const prefix = `${uid}/${orderId}`;
+          const { data: files } = await admin.storage.from('orders').list(prefix);
+          if (files?.length) {
+            await admin.storage.from('orders').remove(files.map((f) => `${prefix}/${f.name}`));
+          }
+        }
+      } catch {}
+
+      await admin.from('order_items').delete().eq('order_id', orderId);
+      await admin.from('orders').delete().eq('id', orderId);
+    };
+
+    // A. Explicit order IDs
+    for (const ordId of orderIds) {
+      await purgeOrder(ordId, resolvedUserId);
+    }
+
+    // B. Orders by resolvedUserId
     if (resolvedUserId) {
       try {
-        await admin.from('orders').update({ user_id: null }).eq('user_id', resolvedUserId);
-        await admin.from('order_items').update({ user_id: null }).eq('user_id', resolvedUserId);
+        const { data: userOrders } = await admin.from('orders').select('id').eq('user_id', resolvedUserId);
+        for (const o of userOrders || []) {
+          await purgeOrder(o.id, resolvedUserId);
+        }
+      } catch {}
+
+      await admin.from('order_items').delete().eq('user_id', resolvedUserId);
+      await admin.from('orders').delete().eq('user_id', resolvedUserId);
+    }
+
+    // C. Orders matched by customer email or phone in JSON data
+    if (email || phone) {
+      try {
+        const { data: allOrders } = await admin.from('orders').select('id, data, user_id');
+        const matchedOrders = (allOrders || []).filter((o: any) => {
+          const cEmail = (o.data?.customer?.email || '').trim().toLowerCase();
+          const cPhone = (o.data?.customer?.phone || '').trim();
+          if (email && cEmail === email) return true;
+          if (phone && cPhone === phone) return true;
+          return false;
+        });
+
+        for (const o of matchedOrders) {
+          await purgeOrder(o.id, o.user_id);
+        }
       } catch {}
     }
 
@@ -310,9 +370,10 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: 'Customer account successfully deleted. Orders preserved.',
+      message: 'Customer account and all associated data successfully deleted.',
       deletedUserId: resolvedUserId,
       deletedEmail: email,
+      deletedOrdersCount: purgedOrderIds.size,
     });
   } catch (error: any) {
     console.error('Delete customer error:', error);
