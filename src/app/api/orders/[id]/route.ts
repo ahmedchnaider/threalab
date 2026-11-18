@@ -88,6 +88,9 @@ export async function DELETE(
     }
   }
 
+  // Delete related items first (safe even without ON DELETE CASCADE)
+  await admin.from('order_items').delete().eq('order_id', id);
+
   const { error } = await admin.from('orders').delete().eq('id', id);
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

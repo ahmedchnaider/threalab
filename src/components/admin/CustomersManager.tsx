@@ -20,7 +20,7 @@ interface CustomerStat {
 interface CustomersManagerProps {
   orders: Order[];
   currency: string;
-  onDeleteCustomer?: (email: string) => Promise<void>;
+  onDeleteCustomer?: (email: string, orderIds?: string[], phone?: string) => Promise<void>;
   onDeleteCustomerOrders?: (email: string) => Promise<void>;
 }
 
@@ -31,8 +31,8 @@ export function CustomersManager({
   onDeleteCustomerOrders,
 }: CustomersManagerProps) {
   const [search, setSearch] = useState('');
-  const [confirmDeleteEmail, setConfirmDeleteEmail] = useState<string | null>(null);
-  const [isDeletingEmail, setIsDeletingEmail] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
   const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
   const [dbProfiles, setDbProfiles] = useState<any[]>([]);
   const { toast } = useToast();
@@ -52,23 +52,34 @@ export function CustomersManager({
     loadProfiles();
   }, []);
 
-  const handleDelete = async (email: string) => {
-    setIsDeletingEmail(email);
+  const handleDelete = async (customer: CustomerStat) => {
+    const key = (customer.email && customer.email !== 'No email' ? customer.email : customer.phone) || 'anon';
+    setIsDeletingId(key);
     try {
+      const orderIds = customer.orders.map((o) => o.id);
+      const emailToSend = customer.email && customer.email !== 'No email' ? customer.email : '';
+      const phoneToSend = customer.phone && customer.phone !== 'No phone' ? customer.phone : '';
+
       if (onDeleteCustomer) {
-        await onDeleteCustomer(email);
+        await onDeleteCustomer(emailToSend, orderIds, phoneToSend);
       } else if (onDeleteCustomerOrders) {
-        await onDeleteCustomerOrders(email);
+        await onDeleteCustomerOrders(emailToSend);
       }
       setDbProfiles((prev) =>
-        prev.filter((p) => (p.email || '').toLowerCase() !== email.toLowerCase())
+        prev.filter((p) => {
+          const pEmail = (p.email || '').trim().toLowerCase();
+          const pPhone = (p.phone || '').trim();
+          if (emailToSend && pEmail && pEmail === emailToSend.toLowerCase()) return false;
+          if (phoneToSend && pPhone && pPhone === phoneToSend) return false;
+          return true;
+        })
       );
-      setConfirmDeleteEmail(null);
-      toast('Customer account and data deleted');
+      setConfirmDeleteId(null);
+      toast('Customer account and all associated orders deleted');
     } catch {
       toast('Failed to delete customer account');
     } finally {
-      setIsDeletingEmail(null);
+      setIsDeletingId(null);
     }
   };
 
@@ -164,6 +175,8 @@ export function CustomersManager({
       ) : (
         <div className="space-y-4">
           {filtered.map((c) => {
+            const customerKey =
+              (c.email && c.email !== 'No email' ? c.email : c.phone) || 'anon';
             const initials = c.name
               .split(' ')
               .map((w) => w[0])
@@ -226,36 +239,36 @@ export function CustomersManager({
                     onClick={() =>
                       setExpandedOrders((prev) => ({
                         ...prev,
-                        [c.email]: !prev[c.email],
+                        [customerKey]: !prev[customerKey],
                       }))
                     }
                     className="text-xs font-bold text-[#141414] hover:text-[#ff4d1c] transition-colors"
                   >
-                    {expandedOrders[c.email] ? 'Hide Orders' : `View ${c.orderCount} Orders`}
+                    {expandedOrders[customerKey] ? 'Hide Orders' : `View ${c.orderCount} Orders`}
                   </button>
 
                   <button
-                    disabled={isDeletingEmail === c.email}
+                    disabled={isDeletingId === customerKey}
                     onClick={() => {
-                      if (confirmDeleteEmail === c.email) {
-                        handleDelete(c.email);
+                      if (confirmDeleteId === customerKey) {
+                        handleDelete(c);
                       } else {
-                        setConfirmDeleteEmail(c.email);
-                        setTimeout(() => setConfirmDeleteEmail(null), 4000);
+                        setConfirmDeleteId(customerKey);
+                        setTimeout(() => setConfirmDeleteId(null), 4000);
                       }
                     }}
                     className={`px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 transition-colors ${
-                      confirmDeleteEmail === c.email
+                      confirmDeleteId === customerKey
                         ? 'bg-[#b3261e] text-white border-[#b3261e]'
                         : 'border-[#b3261e] text-[#b3261e] hover:bg-[#b3261e] hover:text-white'
                     }`}
-                    title="Delete customer account"
+                    title="Delete customer account and all associated orders"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     <span>
-                      {isDeletingEmail === c.email
+                      {isDeletingId === customerKey
                         ? 'Deleting…'
-                        : confirmDeleteEmail === c.email
+                        : confirmDeleteId === customerKey
                         ? 'Confirm delete account?'
                         : 'Delete Account'}
                     </span>
@@ -263,7 +276,7 @@ export function CustomersManager({
                 </div>
 
                 {/* Expanded customer orders */}
-                {expandedOrders[c.email] && (
+                {expandedOrders[customerKey] && (
                   <div className="bg-[#ebe6dc]/40 rounded-xl p-3 space-y-2 border border-[#ddd6c8]">
                     {c.orders.map((o) => (
                       <div

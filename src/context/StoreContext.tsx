@@ -20,6 +20,7 @@ interface StoreContextType {
   updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
   cancelOrder: (orderId: string) => Promise<void>;
   deleteOrder: (orderId: string) => Promise<void>;
+  deleteOrders: (orderIds: string[]) => Promise<void>;
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
@@ -253,9 +254,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const deleteOrder = async (orderId: string) => {
-    const updated = orders.filter((o) => o.id !== orderId);
-    setOrders(updated);
-    localStorage.setItem('tl_orders', JSON.stringify(updated));
+    setOrders((prev) => {
+      const updated = prev.filter((o) => o.id !== orderId);
+      try {
+        localStorage.setItem('tl_orders', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
 
     try {
       await fetch(`/api/orders/${orderId}`, { method: 'DELETE' });
@@ -263,6 +268,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // Offline fallback
     }
     toast('Order deleted');
+  };
+
+  const deleteOrders = async (orderIds: string[]) => {
+    if (!orderIds || orderIds.length === 0) return;
+    const idSet = new Set(orderIds);
+    setOrders((prev) => {
+      const updated = prev.filter((o) => !idSet.has(o.id));
+      try {
+        localStorage.setItem('tl_orders', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    try {
+      await Promise.allSettled(
+        orderIds.map((id) => fetch(`/api/orders/${id}`, { method: 'DELETE' }))
+      );
+    } catch {
+      // Offline fallback
+    }
   };
 
   return (
@@ -282,6 +307,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         updateOrderStatus,
         cancelOrder,
         deleteOrder,
+        deleteOrders,
       }}
     >
       {children}
