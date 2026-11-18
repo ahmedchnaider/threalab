@@ -6,12 +6,12 @@ import { usePathname } from 'next/navigation';
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
 import { useStore } from '@/context/StoreContext';
-import { ShoppingBag, User, ShieldCheck } from 'lucide-react';
+import { ShoppingBag, User } from 'lucide-react';
 
 export function Header() {
   const pathname = usePathname();
   const { cartCount } = useCart();
-  const { user, profile, isAdmin } = useAuth();
+  const { user, profile } = useAuth();
   const { settings } = useStore();
 
   const brandName = (settings.name || 'THREADLAB').toUpperCase();
@@ -57,20 +57,6 @@ export function Header() {
               </span>
             )}
           </Link>
-
-          {isAdmin && (
-            <Link
-              href="/admin"
-              className={`px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-1 border ${
-                pathname.startsWith('/admin')
-                  ? 'bg-[#ff4d1c] text-white border-[#ff4d1c]'
-                  : 'bg-[#141414] text-white hover:bg-[#ff4d1c] border-[#141414]'
-              }`}
-            >
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Admin</span>
-            </Link>
-          )}
         </nav>
       </div>
     </header>
