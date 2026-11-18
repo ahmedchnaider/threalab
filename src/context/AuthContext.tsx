@@ -22,15 +22,29 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Admin hash for 'adam080gacem'
+const ADMIN_HASH = 'e771e8530ae209875e08700b44a054ae2f1050944393a8784f69b2d3832f928b';
+
+async function hashPw(pw: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('threadlab-admin:' + pw));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(true);
-  const [adminUnlocked, setAdminUnlocked] = useState(true);
+  const [adminUnlocked, setAdminUnlocked] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
+    // Check saved admin unlock state in session
+    try {
+      if (typeof window !== 'undefined' && sessionStorage.getItem('tl_admin') === 'true') {
+        setAdminUnlocked(true);
+      }
+    } catch {}
     // Check local session or Supabase
     if (isSupabaseConfigured && supabase) {
       supabase.auth.getSession().then(({ data: { session } }) => {
@@ -300,8 +314,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setUser(null);
     setProfile(null);
+    setAdminUnlocked(false);
     localStorage.removeItem('tl_user');
     localStorage.removeItem('tl_profile');
+    try {
+      sessionStorage.removeItem('tl_admin');
+    } catch {}
     toast('You have logged out');
   };
 
@@ -318,13 +336,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     toast('Profile updated ✓');
   };
 
-  const unlockAdmin = async (_password?: string): Promise<boolean> => {
-    setAdminUnlocked(true);
-    return true;
+  const unlockAdmin = async (password: string): Promise<boolean> => {
+    try {
+      const trimmed = (password || '').trim();
+      const hashed = await hashPw(trimmed);
+      if (hashed === ADMIN_HASH || trimmed === 'adam080gacem') {
+        setAdminUnlocked(true);
+        sessionStorage.setItem('tl_admin', 'true');
+        toast('Admin unlocked');
+        return true;
+      }
+    } catch {
+      //
+    }
+    return false;
   };
 
   const lockAdmin = () => {
-    // Secondary admin lock disabled
+    setAdminUnlocked(false);
+    try {
+      sessionStorage.removeItem('tl_admin');
+    } catch {}
+    toast('Admin locked');
   };
 
   return (

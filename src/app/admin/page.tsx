@@ -1,16 +1,20 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useAuth } from '@/context/AuthContext';
 import { useStore } from '@/context/StoreContext';
+import { AdminLock } from '@/components/admin/AdminLock';
 import { ProductsManager } from '@/components/admin/ProductsManager';
 import { OrdersManager } from '@/components/admin/OrdersManager';
 import { CustomersManager } from '@/components/admin/CustomersManager';
 import { DesignsManager } from '@/components/admin/DesignsManager';
 import { SettingsManager } from '@/components/admin/SettingsManager';
+import { Lock } from 'lucide-react';
 
 type AdminTab = 'products' | 'orders' | 'customers' | 'designs' | 'store';
 
 export default function AdminPage() {
+  const { adminUnlocked, lockAdmin } = useAuth();
   const {
     products,
     designs,
@@ -26,6 +30,10 @@ export default function AdminPage() {
   } = useStore();
 
   const [activeTab, setActiveTab] = useState<AdminTab>('products');
+
+  if (!adminUnlocked) {
+    return <AdminLock />;
+  }
 
   const handleDeleteCustomerOrders = async (email: string) => {
     const customerOrders = orders.filter(
@@ -48,14 +56,22 @@ export default function AdminPage() {
     <div className="space-y-6">
       {/* Top Admin Header */}
       <div className="flex justify-between items-center pb-4 border-b-[1.5px] border-[#141414]">
-        <div>
+        <div className="flex items-center gap-3">
           <h1 className="font-anton text-3xl sm:text-4xl uppercase tracking-wide text-[#141414]">
             Store Administration
           </h1>
-          <p className="text-xs sm:text-sm text-[#6b665d] mt-1 font-mono">
-            Manage products, orders, customers, and store preferences
-          </p>
+          <span className="hidden sm:inline bg-[#ff4d1c] text-white text-[11px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+            Unlocked
+          </span>
         </div>
+
+        <button
+          onClick={lockAdmin}
+          className="px-3.5 py-1.5 rounded-full border border-[#141414] hover:bg-[#141414] hover:text-[#f4f1ea] text-xs font-bold flex items-center gap-1.5 transition-colors"
+        >
+          <Lock className="w-3.5 h-3.5 text-[#ff4d1c]" />
+          <span>Lock Panel</span>
+        </button>
       </div>
 
       {/* Tabs */}
