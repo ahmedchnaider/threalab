@@ -125,6 +125,47 @@ export default function AdminPage() {
     } catch {}
   };
 
+  const handleClearAllData = async () => {
+    // 1. Delete all orders from local state & storage
+    const allOrderIds = orders.map((o) => o.id);
+    if (allOrderIds.length > 0) {
+      await deleteOrders(allOrderIds);
+    }
+
+    // 2. Wipe Supabase orders, order items, storage, profiles, auth users
+    try {
+      await fetch('/api/profile?all=true', { method: 'DELETE' });
+    } catch {}
+
+    // 3. Clear customer cache in localStorage
+    try {
+      localStorage.removeItem('tl_orders');
+      localStorage.removeItem('tl_user');
+      localStorage.removeItem('tl_profile');
+      localStorage.removeItem('tl_checkout_info');
+
+      // Clear all email-keyed profile caches
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('tl_profile_')) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
+
+      // Broadcast to all tabs to clear customer session and orders
+      const payload = { clearAll: true, time: Date.now() };
+      localStorage.setItem('tl_deleted_account', JSON.stringify(payload));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('tl_deleted_account', { detail: payload }));
+      }
+    } catch {}
+
+    // 4. Log out any active customer session on this window while keeping admin unlocked
+    await logout('All customer and order data has been cleared.');
+  };
+
   const tabs: Array<{ id: AdminTab; label: string; count?: number }> = [
     { id: 'products', label: 'Products', count: products.length },
     { id: 'orders', label: 'Orders', count: orders.length },
@@ -209,6 +250,7 @@ export default function AdminPage() {
             orders={orders}
             currency={settings.currency}
             onDeleteCustomer={handleDeleteCustomerAccount}
+            onClearAllData={handleClearAllData}
           />
         )}
 

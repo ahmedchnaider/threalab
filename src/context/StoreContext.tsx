@@ -103,6 +103,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (e.key === 'tl_deleted_account' && e.newValue) {
         try {
           const parsed = JSON.parse(e.newValue);
+          if (parsed?.clearAll) {
+            setOrders([]);
+            try { localStorage.removeItem('tl_orders'); } catch {}
+            return;
+          }
           const delEmail = (parsed?.email || '').trim().toLowerCase();
           const delPhone = normalizePhone(parsed?.phone);
           const delOrderIds: string[] = Array.isArray(parsed?.orderIds) ? parsed.orderIds : [];
@@ -124,6 +129,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const handleCustom = (e: Event) => {
       try {
         const detail = (e as CustomEvent).detail;
+        if (detail?.clearAll) {
+          setOrders([]);
+          try { localStorage.removeItem('tl_orders'); } catch {}
+          return;
+        }
         const delEmail = (detail?.email || '').trim().toLowerCase();
         const delPhone = normalizePhone(detail?.phone);
         const delOrderIds: string[] = Array.isArray(detail?.orderIds) ? detail.orderIds : [];

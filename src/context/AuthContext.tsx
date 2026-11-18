@@ -73,9 +73,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {}
 
     // Listen for account deletion broadcasts across all tabs/windows and in current window
-    const handleDeletedAccount = (data: { email?: string; phone?: string; orderIds?: string[] }) => {
+    const handleDeletedAccount = (data: { email?: string; phone?: string; orderIds?: string[]; clearAll?: boolean }) => {
       // Never log out the store administrator
       if (adminUnlockedRef.current) return;
+
+      if (data?.clearAll) {
+        logout('All customer and order data was cleared.');
+        return;
+      }
 
       const activeEmail = (userRef.current?.email || profileRef.current?.email || '').trim().toLowerCase();
       const activeNormPhone = normalizePhone(profileRef.current?.phone);

@@ -32,6 +32,7 @@ interface CustomersManagerProps {
   currency: string;
   onDeleteCustomer?: (customer: CustomerStat) => Promise<void>;
   onDeleteCustomerOrders?: (email: string) => Promise<void>;
+  onClearAllData?: () => Promise<void>;
 }
 
 export function CustomersManager({
@@ -39,10 +40,13 @@ export function CustomersManager({
   currency,
   onDeleteCustomer,
   onDeleteCustomerOrders,
+  onClearAllData,
 }: CustomersManagerProps) {
   const [search, setSearch] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
+  const [confirmClearAll, setConfirmClearAll] = useState(false);
+  const [isClearingAll, setIsClearingAll] = useState(false);
   const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
   const [dbProfiles, setDbProfiles] = useState<any[]>([]);
   const { toast } = useToast();
@@ -89,6 +93,24 @@ export function CustomersManager({
       toast('Failed to delete customer account');
     } finally {
       setIsDeletingId(null);
+    }
+  };
+
+  const handleClearAll = async () => {
+    setIsClearingAll(true);
+    try {
+      if (onClearAllData) {
+        await onClearAllData();
+      } else {
+        await fetch('/api/profile?all=true', { method: 'DELETE' });
+      }
+      setDbProfiles([]);
+      setConfirmClearAll(false);
+      toast('All customer and order data has been cleared');
+    } catch {
+      toast('Failed to clear data');
+    } finally {
+      setIsClearingAll(false);
     }
   };
 
@@ -187,8 +209,38 @@ export function CustomersManager({
           />
         </div>
 
-        <div className="text-xs text-[#6b665d] font-medium">
-          {customers.length} customer account{customers.length === 1 ? '' : 's'}
+        <div className="flex items-center gap-3">
+          <div className="text-xs text-[#6b665d] font-medium">
+            {customers.length} customer account{customers.length === 1 ? '' : 's'}
+          </div>
+          {(customers.length > 0 || orders.length > 0) && (
+            <button
+              disabled={isClearingAll}
+              onClick={() => {
+                if (confirmClearAll) {
+                  handleClearAll();
+                } else {
+                  setConfirmClearAll(true);
+                  setTimeout(() => setConfirmClearAll(false), 4500);
+                }
+              }}
+              className={`px-3 py-1.5 rounded-lg border text-xs font-bold flex items-center gap-1.5 transition-colors ${
+                confirmClearAll
+                  ? 'bg-[#b3261e] text-white border-[#b3261e]'
+                  : 'border-[#141414] text-[#141414] hover:bg-[#b3261e] hover:text-white hover:border-[#b3261e]'
+              }`}
+              title="Clear all customer accounts and orders"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>
+                {isClearingAll
+                  ? 'Clearing Data…'
+                  : confirmClearAll
+                  ? 'Confirm Clear All Data?'
+                  : 'Clear All Data'}
+              </span>
+            </button>
+          )}
         </div>
       </div>
 

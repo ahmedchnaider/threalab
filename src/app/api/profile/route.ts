@@ -230,6 +230,7 @@ export async function POST(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
+    const clearAll = searchParams.get('all') === 'true';
     const email = searchParams.get('email')?.trim().toLowerCase();
     const userId = searchParams.get('userId')?.trim();
     const phone = searchParams.get('phone')?.trim();
@@ -241,6 +242,43 @@ export async function DELETE(request: NextRequest) {
           .filter(Boolean)
       : [];
 
+    const admin = createAdminClient();
+
+    // Clear all customer and order data
+    if (clearAll) {
+      if (admin) {
+        await admin.from('order_items').delete().neq('id', '___none___');
+        await admin.from('orders').delete().neq('id', '___none___');
+
+        const { data: ordFiles } = await admin.storage.from('orders').list();
+        for (const item of ordFiles || []) {
+          const { data: subFiles } = await admin.storage.from('orders').list(item.name);
+          if (subFiles && subFiles.length > 0) {
+            for (const sub of subFiles) {
+              const { data: innerFiles } = await admin.storage.from('orders').list(item.name + '/' + sub.name);
+              if (innerFiles?.length) {
+                await admin.storage.from('orders').remove(innerFiles.map((f) => `${item.name}/${sub.name}/${f.name}`));
+              }
+            }
+            await admin.storage.from('orders').remove(subFiles.map((f) => `${item.name}/${f.name}`));
+          }
+          await admin.storage.from('orders').remove([item.name]);
+        }
+
+        await admin.from('profiles').delete().neq('user_id', '___none___');
+
+        const { data: authUsers } = await admin.auth.admin.listUsers({ page: 1, perPage: 100 });
+        for (const u of authUsers?.users || []) {
+          await admin.auth.admin.deleteUser(u.id);
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: 'All customer and order data has been completely cleared.',
+      });
+    }
+
     if (!email && !userId && !phone && orderIds.length === 0) {
       return NextResponse.json(
         { error: 'Email, userId, phone, or orderIds are required to delete customer account' },
@@ -248,7 +286,6 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const admin = createAdminClient();
     if (!admin) {
       return NextResponse.json({ success: true, message: 'Deleted locally' });
     }
