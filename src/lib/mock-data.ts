@@ -45,7 +45,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     price: 65,
     printPrice: 15,
     colors: ['#ffffff', '#141414', '#c8b89a', '#2f4a3a'],
-    sizes: ['S', 'M', 'L', 'XL'],
+    sizes: ['S', 'M', 'L', 'XL', 'XXL'],
     description: 'Classic raglan sleeve crewneck. Ultra soft interior cotton blend with drop shoulders.',
     hasBack: true,
     area: defaultArea('sweatshirt', 'front', false),

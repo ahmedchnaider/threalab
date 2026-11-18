@@ -65,7 +65,7 @@ function createEmptyProduct(order: number): Product {
     price: 45,
     printPrice: 15,
     colors: ['#ffffff', '#141414'],
-    sizes: ['S', 'M', 'L', 'XL'],
+    sizes: ['S', 'M', 'L', 'XL', 'XXL'],
     description: '',
     photo: '',
     photoBack: '',
@@ -131,7 +131,7 @@ export function ProductsManager({ products, currency, onSave, onDelete }: Produc
           setIsPhoto(hasPhoto);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
 
     return () => {
       canceled = true;
@@ -244,7 +244,7 @@ export function ProductsManager({ products, currency, onSave, onDelete }: Produc
     dragRef.current = null;
     try {
       e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch {}
+    } catch { }
   };
 
   // Upload color-specific photo (front or back for a particular color)
@@ -479,19 +479,17 @@ export function ProductsManager({ products, currency, onSave, onDelete }: Produc
                           setActiveColor(updated[0] || '');
                         }
                       }}
-                      className={`w-7 h-7 rounded-full border border-black/25 transition-all relative ${
-                        isSelected ? 'ring-2 ring-[#ff4d1c] ring-offset-2 scale-110 shadow-sm' : 'opacity-70 hover:opacity-100 hover:scale-105'
-                      }`}
+                      className={`w-7 h-7 rounded-full border border-black/25 transition-all relative ${isSelected ? 'ring-2 ring-[#ff4d1c] ring-offset-2 scale-110 shadow-sm' : 'opacity-70 hover:opacity-100 hover:scale-105'
+                        }`}
                       style={{ backgroundColor: c }}
                       title={`${COLOR_NAMES[c] || c} (${isSelected ? 'Selected' : 'Click to add'})`}
                     >
                       {isSelected && (
                         <Check
-                          className={`w-3.5 h-3.5 absolute inset-0 m-auto ${
-                            c === '#ffffff' || c === '#e9e4d8' || c === '#f2c94c' || c === '#e8a7b8'
-                              ? 'text-[#141414]'
-                              : 'text-white'
-                          }`}
+                          className={`w-3.5 h-3.5 absolute inset-0 m-auto ${c === '#ffffff' || c === '#e9e4d8' || c === '#f2c94c' || c === '#e8a7b8'
+                            ? 'text-[#141414]'
+                            : 'text-white'
+                            }`}
                         />
                       )}
                     </button>
@@ -520,11 +518,10 @@ export function ProductsManager({ products, currency, onSave, onDelete }: Produc
                     return (
                       <div
                         key={c}
-                        className={`border rounded-xl p-3 transition-all ${
-                          isActive
-                            ? 'border-[#ff4d1c] bg-[#fffaf5] shadow-xs'
-                            : 'border-[#ddd6c8] bg-[#faf8f4] hover:border-[#aaa]'
-                        }`}
+                        className={`border rounded-xl p-3 transition-all ${isActive
+                          ? 'border-[#ff4d1c] bg-[#fffaf5] shadow-xs'
+                          : 'border-[#ddd6c8] bg-[#faf8f4] hover:border-[#aaa]'
+                          }`}
                       >
                         {/* Header for this color swatch */}
                         <div className="flex justify-between items-center mb-2.5 pb-2 border-b border-[#ece7de]">
@@ -542,11 +539,10 @@ export function ProductsManager({ products, currency, onSave, onDelete }: Produc
                           <button
                             type="button"
                             onClick={() => setActiveColor(c)}
-                            className={`text-xs px-2.5 py-1 rounded-md font-bold flex items-center gap-1 transition-colors ${
-                              isActive
-                                ? 'bg-[#ff4d1c] text-white'
-                                : 'bg-white border border-[#ddd6c8] text-[#141414] hover:bg-[#141414] hover:text-white'
-                            }`}
+                            className={`text-xs px-2.5 py-1 rounded-md font-bold flex items-center gap-1 transition-colors ${isActive
+                              ? 'bg-[#ff4d1c] text-white'
+                              : 'bg-white border border-[#ddd6c8] text-[#141414] hover:bg-[#141414] hover:text-white'
+                              }`}
                             title="Preview this color in the interactive canvas"
                           >
                             <Eye className="w-3 h-3" />
@@ -689,11 +685,10 @@ export function ProductsManager({ products, currency, onSave, onDelete }: Produc
                 <button
                   type="button"
                   onClick={() => setActiveSide('front')}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold border transition-all ${
-                    activeSide === 'front'
-                      ? 'bg-[#141414] text-white border-[#141414]'
-                      : 'bg-[#ebe6dc] text-[#141414] border-transparent'
-                  }`}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold border transition-all ${activeSide === 'front'
+                    ? 'bg-[#141414] text-white border-[#141414]'
+                    : 'bg-[#ebe6dc] text-[#141414] border-transparent'
+                    }`}
                 >
                   Front
                 </button>
@@ -701,11 +696,10 @@ export function ProductsManager({ products, currency, onSave, onDelete }: Produc
                   <button
                     type="button"
                     onClick={() => setActiveSide('back')}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold border transition-all ${
-                      activeSide === 'back'
-                        ? 'bg-[#141414] text-white border-[#141414]'
-                        : 'bg-[#ebe6dc] text-[#141414] border-transparent'
-                    }`}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold border transition-all ${activeSide === 'back'
+                      ? 'bg-[#141414] text-white border-[#141414]'
+                      : 'bg-[#ebe6dc] text-[#141414] border-transparent'
+                      }`}
                   >
                     Back
                   </button>
@@ -724,9 +718,8 @@ export function ProductsManager({ products, currency, onSave, onDelete }: Produc
                     key={c}
                     type="button"
                     onClick={() => setActiveColor(c)}
-                    className={`w-5 h-5 rounded-full border border-black/25 shrink-0 transition-transform ${
-                      currentPreviewColor === c ? 'ring-2 ring-[#ff4d1c] ring-offset-1 scale-110' : 'hover:scale-105'
-                    }`}
+                    className={`w-5 h-5 rounded-full border border-black/25 shrink-0 transition-transform ${currentPreviewColor === c ? 'ring-2 ring-[#ff4d1c] ring-offset-1 scale-110' : 'hover:scale-105'
+                      }`}
                     style={{ backgroundColor: c }}
                     title={COLOR_NAMES[c] || c}
                   />
@@ -819,11 +812,10 @@ export function ProductsManager({ products, currency, onSave, onDelete }: Produc
                         : [...editing.sizes, s];
                       setEditing({ ...editing, sizes: updated });
                     }}
-                    className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${
-                      isSelected
-                        ? 'bg-[#141414] text-white border-[#141414]'
-                        : 'bg-white text-[#141414] border-[#ddd6c8]'
-                    }`}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${isSelected
+                      ? 'bg-[#141414] text-white border-[#141414]'
+                      : 'bg-white text-[#141414] border-[#ddd6c8]'
+                      }`}
                   >
                     {s}
                   </button>
@@ -955,11 +947,10 @@ export function ProductsManager({ products, currency, onSave, onDelete }: Produc
                         setTimeout(() => setConfirmDeleteId(null), 3500);
                       }
                     }}
-                    className={`p-1.5 rounded-lg border transition-colors ${
-                      confirmDeleteId === p.id
-                        ? 'bg-[#b3261e] text-white border-[#b3261e]'
-                        : 'border-[#b3261e] text-[#b3261e] hover:bg-[#b3261e] hover:text-white'
-                    }`}
+                    className={`p-1.5 rounded-lg border transition-colors ${confirmDeleteId === p.id
+                      ? 'bg-[#b3261e] text-white border-[#b3261e]'
+                      : 'border-[#b3261e] text-[#b3261e] hover:bg-[#b3261e] hover:text-white'
+                      }`}
                     title={confirmDeleteId === p.id ? 'Click to confirm delete' : 'Delete'}
                   >
                     <Trash2 className="w-3.5 h-3.5" />

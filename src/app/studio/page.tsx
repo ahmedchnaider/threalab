@@ -396,9 +396,8 @@ function StudioContent() {
                     key={c}
                     type="button"
                     onClick={() => setColor(c)}
-                    className={`w-8 h-8 rounded-full border border-black/20 transition-all ${
-                      color === c ? 'ring-2 ring-[#141414] ring-offset-2 scale-110' : 'hover:scale-105'
-                    }`}
+                    className={`w-8 h-8 rounded-full border border-black/20 transition-all ${color === c ? 'ring-2 ring-[#141414] ring-offset-2 scale-110' : 'hover:scale-105'
+                      }`}
                     style={{ backgroundColor: c }}
                     title={c}
                   />
@@ -414,7 +413,10 @@ function StudioContent() {
                 Garment Size
               </h4>
               <div className="flex gap-2 flex-wrap">
-                {product.sizes.map((s) => (
+                {(product.type !== 'tote' && !product.sizes.includes('XXL') && !product.sizes.includes('One Size')
+                  ? [...product.sizes, 'XXL']
+                  : product.sizes
+                ).map((s) => (
                   <button
                     key={s}
                     type="button"
@@ -513,9 +515,8 @@ function StudioContent() {
               <div>
                 <div className="text-xs text-[#6b665d]">
                   {printedSides.length > 0
-                    ? `Includes print on ${printedSides.length} side${
-                        printedSides.length > 1 ? 's' : ''
-                      } (+${product.printPrice} ${settings.currency} each)`
+                    ? `Includes print on ${printedSides.length} side${printedSides.length > 1 ? 's' : ''
+                    } (+${product.printPrice} ${settings.currency} each)`
                     : `Custom print adds ${product.printPrice} ${settings.currency} per side`}
                 </div>
                 <div className="font-anton text-3xl sm:text-4xl text-[#141414]">
