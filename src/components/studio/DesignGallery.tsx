@@ -11,10 +11,12 @@ interface DesignGalleryProps {
 export function DesignGallery({ designs, onSelectDesign }: DesignGalleryProps) {
   const [selectedCat, setSelectedCat] = useState<string>('');
 
-  const activeDesigns = designs.filter((d) => d.active && d.image);
+  const activeDesigns = designs.filter((d) => d.active !== false && Boolean(d.image));
   if (activeDesigns.length === 0) return null;
 
-  const categories = Array.from(new Set(activeDesigns.map((d) => d.category).filter(Boolean)));
+  const categories = Array.from(
+    new Set(activeDesigns.map((d) => d.category?.trim()).filter(Boolean))
+  ) as string[];
   const filtered = selectedCat
     ? activeDesigns.filter((d) => d.category === selectedCat)
     : activeDesigns;

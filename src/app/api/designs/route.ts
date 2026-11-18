@@ -14,16 +14,22 @@ export async function GET() {
     .select('*')
     .order('created_at', { ascending: false });
 
-  if (error || !data?.length) {
+  if (error) {
     return NextResponse.json({ designs: INITIAL_DESIGNS });
   }
 
-  const designs = data.map((row: any) => ({
+  const dbDesigns = (data || []).map((row: any) => ({
     ...row.data,
     id: row.id,
+    createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
   }));
 
-  return NextResponse.json({ designs });
+  // Preserve initial default designs alongside custom uploaded ones
+  const customIds = new Set(dbDesigns.map((d: any) => d.id));
+  const remainingInitial = INITIAL_DESIGNS.filter((d) => !customIds.has(d.id));
+
+  const allDesigns = [...dbDesigns, ...remainingInitial];
+  return NextResponse.json({ designs: allDesigns });
 }
 
 export async function POST(request: NextRequest) {
@@ -50,19 +56,26 @@ export async function POST(request: NextRequest) {
       ...rest,
     };
 
+    // Format created_at properly as ISO 8601 for PostgreSQL TIMESTAMPTZ
+    const createdAtDate = rest.createdAt
+      ? new Date(Number(rest.createdAt)).toISOString()
+      : new Date().toISOString();
+
     const { error } = await admin.from('designs').upsert({
       id,
       data: cleanDesign,
-      created_at: rest.createdAt || Date.now(),
+      created_at: createdAtDate,
       updated_at: new Date().toISOString(),
     });
 
     if (error) {
+      console.error('Design upsert error:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     return NextResponse.json({ design: cleanDesign });
   } catch (error: any) {
+    console.error('Design POST error:', error);
     return NextResponse.json({ error: error.message || 'Server error' }, { status: 500 });
   }
 }
