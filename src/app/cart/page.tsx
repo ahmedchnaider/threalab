@@ -39,6 +39,15 @@ export default function CartPage() {
         address: prev.address || profile.address || '',
         notes: prev.notes || '',
       }));
+    } else {
+      setFormData({
+        name: '',
+        email: '',
+        phone: '',
+        city: '',
+        address: '',
+        notes: '',
+      });
     }
   }, [profile, user]);
 

@@ -14,7 +14,7 @@ interface AuthContextType {
   login: (email: string) => Promise<{ success: boolean; error?: string; requiresOtp?: boolean }>;
   verifyOtp: (email: string, token: string) => Promise<{ success: boolean; error?: string }>;
   signup: (data: CustomerProfile) => Promise<{ success: boolean; error?: string; requiresOtp?: boolean }>;
-  logout: () => Promise<void>;
+  logout: (customMessage?: any) => Promise<void>;
   updateProfile: (profile: CustomerProfile) => Promise<void>;
   getProfileByEmail: (email: string) => Promise<CustomerProfile | null>;
   deleteAccount: (email?: string, orderIds?: string[], phone?: string) => Promise<boolean>;
@@ -63,46 +63,90 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (savedProfile) setProfile(JSON.parse(savedProfile));
     } catch {}
 
-    // Always listen for account deletion broadcasts across all tabs/windows
+    // Listen for account deletion broadcasts across all tabs/windows and in current window
+    const handleDeletedAccount = (data: { email?: string; phone?: string }) => {
+      // Never log out the store administrator
+      if (adminUnlockedRef.current) return;
+
+      const activeEmail = (userRef.current?.email || profileRef.current?.email || '').trim().toLowerCase();
+      const activePhone = (profileRef.current?.phone || '').trim();
+      const delEmail = (data?.email || '').trim().toLowerCase();
+      const delPhone = (data?.phone || '').trim();
+
+      const matchesEmail = Boolean(delEmail && activeEmail && activeEmail === delEmail);
+      const matchesPhone = Boolean(delPhone && activePhone && activePhone === delPhone);
+
+      if (matchesEmail || matchesPhone) {
+        logout('Your customer account was deleted.');
+      }
+    };
+
     const handleStorage = (e: StorageEvent) => {
       if (e.key === 'tl_deleted_account' && e.newValue) {
         try {
-          // Never log out the store administrator
-          if (adminUnlockedRef.current) return;
-
-          const parsed = JSON.parse(e.newValue);
-          const activeEmail = (userRef.current?.email || profileRef.current?.email || '').trim().toLowerCase();
-          const matchesEmail = activeEmail && parsed?.email && activeEmail === parsed.email.toLowerCase();
-
-          if (matchesEmail) {
-            logout();
-            toast('Your customer account was deleted.');
-          }
+          handleDeletedAccount(JSON.parse(e.newValue));
         } catch {}
       }
     };
+
+    const handleCustom = (e: Event) => {
+      try {
+        handleDeletedAccount((e as CustomEvent).detail);
+      } catch {}
+    };
+
     if (typeof window !== 'undefined') {
       window.addEventListener('storage', handleStorage);
+      window.addEventListener('tl_deleted_account', handleCustom);
     }
 
     // Check local session or Supabase
     let authListener: any = null;
     if (isSupabaseConfigured && supabase) {
-      supabase.auth.getSession().then(({ data: { session } }) => {
+      const client = supabase;
+      client.auth.getSession().then(async ({ data: { session } }) => {
         if (session?.user) {
+          // Verify with Supabase auth server whether user still exists in auth.users
+          try {
+            const { data: userData, error: userError } = await client.auth.getUser();
+            if (userError || !userData?.user) {
+              if (!adminUnlockedRef.current) {
+                await logout('Your customer account was deleted.');
+              }
+              setIsLoading(false);
+              return;
+            }
+          } catch {}
+
           setUser({ id: session.user.id, email: session.user.email });
-          fetchSupabaseProfile(session.user.id, session.user.email);
+          await fetchSupabaseProfile(session.user.id, session.user.email);
+        } else {
+          // No active Supabase session
+          if (!adminUnlockedRef.current) {
+            setUser(null);
+            setProfile(null);
+            try {
+              localStorage.removeItem('tl_user');
+              localStorage.removeItem('tl_profile');
+            } catch {}
+          }
         }
         setIsLoading(false);
       });
 
-      const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      const { data } = supabase.auth.onAuthStateChange(async (_event, session) => {
         if (session?.user) {
           setUser({ id: session.user.id, email: session.user.email });
-          fetchSupabaseProfile(session.user.id, session.user.email);
+          await fetchSupabaseProfile(session.user.id, session.user.email);
         } else {
-          setUser(null);
-          setProfile(null);
+          if (!adminUnlockedRef.current) {
+            setUser(null);
+            setProfile(null);
+            try {
+              localStorage.removeItem('tl_user');
+              localStorage.removeItem('tl_profile');
+            } catch {}
+          }
         }
       });
       authListener = data;
@@ -116,6 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       if (typeof window !== 'undefined') {
         window.removeEventListener('storage', handleStorage);
+        window.removeEventListener('tl_deleted_account', handleCustom);
       }
     };
   }, []);
@@ -136,6 +181,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setIsAdmin(true);
           }
           return;
+        } else if (data?.profile === null) {
+          // Profile was deleted on server - check if auth user was deleted
+          if (!adminUnlockedRef.current && supabase) {
+            try {
+              const { data: userData, error: userError } = await supabase.auth.getUser();
+              if (userError || !userData?.user) {
+                await logout('Your customer account was deleted.');
+                return;
+              }
+            } catch {}
+          }
         }
       }
     } catch {}
@@ -360,11 +416,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { success: true, requiresOtp: false };
   };
 
-  const logout = async () => {
+  const logout = async (customMessage?: any) => {
     if (isSupabaseConfigured && supabase) {
       await supabase.auth.signOut().catch(() => {});
     }
-    const currentEmail = (user?.email || profile?.email || '').trim().toLowerCase();
+    const currentEmail = (userRef.current?.email || profileRef.current?.email || '').trim().toLowerCase();
     setUser(null);
     setProfile(null);
     try {
@@ -375,7 +431,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem(`tl_profile_${currentEmail}`);
       }
     } catch {}
-    toast('You have logged out');
+    if (typeof customMessage === 'string' && customMessage) {
+      toast(customMessage);
+    } else if (customMessage !== false) {
+      toast('You have logged out');
+    }
   };
 
   const deleteAccount = async (
@@ -402,24 +462,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // 2. Broadcast deletion across all browser windows / tabs
     try {
+      const payload = {
+        email: targetEmail || undefined,
+        phone: targetPhone || undefined,
+        time: Date.now(),
+      };
+      localStorage.setItem('tl_deleted_account', JSON.stringify(payload));
       if (targetEmail) {
-        localStorage.setItem(
-          'tl_deleted_account',
-          JSON.stringify({
-            email: targetEmail,
-            time: Date.now(),
-          })
-        );
         localStorage.removeItem(`tl_profile_${targetEmail}`);
       }
       localStorage.removeItem('tl_user');
       localStorage.removeItem('tl_profile');
       localStorage.removeItem('tl_checkout_info');
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('tl_deleted_account', { detail: payload }));
+      }
     } catch {}
 
     // 3. Log out immediately and reset customer state
-    await logout();
-    toast('Your account has been deleted.');
+    await logout('Your account has been deleted.');
     return true;
   };
 

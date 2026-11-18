@@ -81,12 +81,28 @@ export default function AdminPage() {
 
     // 4. Broadcast deletion across all tabs/windows (logs customer out without affecting admin)
     try {
-      if (cleanEmail && cleanEmail !== 'no email') {
-        localStorage.setItem(
-          'tl_deleted_account',
-          JSON.stringify({ email: cleanEmail, time: Date.now() })
-        );
-        localStorage.removeItem(`tl_profile_${cleanEmail}`);
+      const validEmail = cleanEmail && cleanEmail !== 'no email' ? cleanEmail : undefined;
+      const validPhone = cleanPhone && cleanPhone !== 'no phone' ? cleanPhone : undefined;
+      const payload = {
+        email: validEmail,
+        phone: validPhone,
+        time: Date.now(),
+      };
+
+      localStorage.setItem('tl_deleted_account', JSON.stringify(payload));
+      if (validEmail) {
+        localStorage.removeItem(`tl_profile_${validEmail}`);
+      }
+
+      // If active customer in this browser session matches the deleted customer, reset customer auth
+      const activeEmail = (user?.email || profile?.email || '').trim().toLowerCase();
+      const activePhone = (profile?.phone || '').trim();
+      if ((validEmail && activeEmail === validEmail) || (validPhone && activePhone === validPhone)) {
+        await logout('Customer account was deleted.');
+      }
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('tl_deleted_account', { detail: payload }));
       }
     } catch {}
   };

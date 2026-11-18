@@ -64,6 +64,14 @@ export default function AccountPage() {
       }
 
       await deleteAccount(cleanEmail, targetOrderIds, cleanPhone);
+
+      // Clear input and profile fields
+      setEmail('');
+      setName('');
+      setPhone('');
+      setCity('');
+      setAddress('');
+      setProfileForm({ name: '', email: '', phone: '', city: '', address: '' });
     } finally {
       setIsDeletingMyAccount(false);
       setConfirmDeleteMyAccount(false);
@@ -87,6 +95,8 @@ export default function AccountPage() {
         city: base?.city || prev.city || '',
         address: base?.address || prev.address || '',
       }));
+    } else {
+      setProfileForm({ name: '', email: '', phone: '', city: '', address: '' });
     }
   }, [profile, user]);
 
@@ -467,7 +477,7 @@ export default function AccountPage() {
         </div>
 
         <button
-          onClick={logout}
+          onClick={() => logout()}
           className="px-4 py-2 rounded-full border border-[#141414] hover:bg-[#141414] hover:text-[#f4f1ea] text-xs font-bold flex items-center gap-2 transition-colors"
         >
           <LogOut className="w-3.5 h-3.5" />
