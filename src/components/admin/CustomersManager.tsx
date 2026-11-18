@@ -27,11 +27,41 @@ export function CustomersManager({ orders, currency, onDeleteCustomerOrders }: C
   const [search, setSearch] = useState('');
   const [confirmDeleteEmail, setConfirmDeleteEmail] = useState<string | null>(null);
   const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
+  const [dbProfiles, setDbProfiles] = useState<any[]>([]);
   const { toast } = useToast();
 
-  // Aggregate customers from orders
+  React.useEffect(() => {
+    fetch('/api/profile?all=true')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.profiles?.length) {
+          setDbProfiles(data.profiles);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Aggregate customers from orders and registered profiles
   const customersMap = new Map<string, CustomerStat>();
 
+  // 1. Add all registered customer profiles first
+  for (const p of dbProfiles) {
+    const email = (p.email || '').trim().toLowerCase();
+    if (!email) continue;
+    customersMap.set(email, {
+      email: p.email,
+      name: p.name || 'Anonymous',
+      phone: p.phone || 'No phone',
+      city: p.city || 'No city',
+      address: p.address || '',
+      orderCount: 0,
+      totalSpent: 0,
+      lastOrderAt: p.last_order_at || (p.updated_at ? new Date(p.updated_at).getTime() : 0),
+      orders: [],
+    });
+  }
+
+  // 2. Merge order stats
   for (const o of orders) {
     const email = o.customer.email?.trim().toLowerCase() || o.customer.phone || 'guest';
     const existing = customersMap.get(email);
@@ -55,6 +85,10 @@ export function CustomersManager({ orders, currency, onDeleteCustomerOrders }: C
       if (o.createdAt > existing.lastOrderAt) {
         existing.lastOrderAt = o.createdAt;
       }
+      if (o.customer.name && existing.name === 'Anonymous') existing.name = o.customer.name;
+      if (o.customer.phone && existing.phone === 'No phone') existing.phone = o.customer.phone;
+      if (o.customer.city && existing.city === 'No city') existing.city = o.customer.city;
+      if (o.customer.address && !existing.address) existing.address = o.customer.address;
       existing.orders.push(o);
     }
   }

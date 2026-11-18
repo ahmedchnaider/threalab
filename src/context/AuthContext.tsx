@@ -45,12 +45,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAdminUnlocked(true);
       }
     } catch {}
+
+    // Load cached profile immediately from localStorage so UI is instantly populated
+    try {
+      const savedUser = localStorage.getItem('tl_user');
+      const savedProfile = localStorage.getItem('tl_profile');
+      if (savedUser) setUser(JSON.parse(savedUser));
+      if (savedProfile) setProfile(JSON.parse(savedProfile));
+    } catch {}
+
     // Check local session or Supabase
     if (isSupabaseConfigured && supabase) {
       supabase.auth.getSession().then(({ data: { session } }) => {
         if (session?.user) {
           setUser({ id: session.user.id, email: session.user.email });
-          fetchSupabaseProfile(session.user.id);
+          fetchSupabaseProfile(session.user.id, session.user.email);
         }
         setIsLoading(false);
       });
@@ -58,7 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
         if (session?.user) {
           setUser({ id: session.user.id, email: session.user.email });
-          fetchSupabaseProfile(session.user.id);
+          fetchSupabaseProfile(session.user.id, session.user.email);
         } else {
           setUser(null);
           setProfile(null);
@@ -69,38 +78,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         authListener.subscription.unsubscribe();
       };
     } else {
-      // Local demo persistence
-      try {
-        const savedUser = localStorage.getItem('tl_user');
-        const savedProfile = localStorage.getItem('tl_profile');
-        const savedAdmin = sessionStorage.getItem('tl_admin') === 'true';
-        if (savedUser && savedProfile) {
-          setUser(JSON.parse(savedUser));
-          setProfile(JSON.parse(savedProfile));
-        }
-        setAdminUnlocked(savedAdmin);
-        setIsAdmin(true); // Enable admin tab visibility in mock mode
-      } catch {
-        // ignore
-      } finally {
-        setIsLoading(false);
-      }
+      setIsLoading(false);
     }
   }, []);
 
-  const fetchSupabaseProfile = async (uid: string) => {
-    if (!supabase) return;
+  const fetchSupabaseProfile = async (uid: string, userEmail?: string) => {
+    // 1. Try server endpoint
     try {
-      const { data, error } = await supabase.from('profiles').select('*').eq('user_id', uid).maybeSingle();
-      if (data && !error) {
-        setProfile(data);
+      const q = new URLSearchParams();
+      if (uid) q.set('userId', uid);
+      if (userEmail) q.set('email', userEmail);
+      const res = await fetch(`/api/profile?${q.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.profile) {
+          setProfile(data.profile);
+          localStorage.setItem('tl_profile', JSON.stringify(data.profile));
+          if (data.profile.is_admin) {
+            setIsAdmin(true);
+          }
+          return;
+        }
       }
-      const adminCheck = await supabase.rpc('is_admin');
-      if (adminCheck?.data) {
-        setIsAdmin(true);
-      }
-    } catch {
-      // fallback
+    } catch {}
+
+    // 2. Direct client fallback
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.from('profiles').select('*').eq('user_id', uid).maybeSingle();
+        if (data && !error) {
+          setProfile(data);
+          localStorage.setItem('tl_profile', JSON.stringify(data));
+        }
+        const adminCheck = await supabase.rpc('is_admin');
+        if (adminCheck?.data) {
+          setIsAdmin(true);
+        }
+      } catch {}
     }
   };
 
@@ -324,15 +338,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const updateProfile = async (newProfile: CustomerProfile) => {
+    // 1. Update state and localStorage immediately
     setProfile(newProfile);
-    if (isSupabaseConfigured && supabase && user) {
-      await supabase.from('profiles').upsert({
-        user_id: user.id,
-        ...newProfile,
-      });
-    } else {
+    try {
       localStorage.setItem('tl_profile', JSON.stringify(newProfile));
+      if (newProfile.email) {
+        const uid = user?.id || 'user-' + newProfile.email.replace(/[^a-z0-9]/gi, '');
+        const updatedUser = { id: uid, email: newProfile.email };
+        setUser(updatedUser);
+        localStorage.setItem('tl_user', JSON.stringify(updatedUser));
+      }
+    } catch {}
+
+    // 2. Persist to server API route /api/profile
+    try {
+      const res = await fetch('/api/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...newProfile,
+          userId: user?.id,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.profile) {
+          setProfile(data.profile);
+          localStorage.setItem('tl_profile', JSON.stringify(data.profile));
+        }
+      } else {
+        throw new Error('API save failed');
+      }
+    } catch {
+      // 3. Direct client fallback if API route fails
+      if (isSupabaseConfigured && supabase && user) {
+        try {
+          await supabase.from('profiles').upsert({
+            user_id: user.id,
+            name: newProfile.name,
+            email: newProfile.email,
+            phone: newProfile.phone,
+            city: newProfile.city,
+            address: newProfile.address,
+            updated_at: new Date().toISOString(),
+          });
+        } catch {}
+      }
     }
+
     toast('Profile updated ✓');
   };
 

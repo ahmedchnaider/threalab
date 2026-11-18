@@ -26,27 +26,37 @@ export default function AccountPage() {
   const [authError, setAuthError] = useState('');
 
   // Profile Form state
-  const [profileForm, setProfileForm] = useState<CustomerProfile>({
-    name: profile?.name || '',
-    email: profile?.email || user?.email || '',
-    phone: profile?.phone || '',
-    city: profile?.city || '',
-    address: profile?.address || '',
+  const [profileForm, setProfileForm] = useState<CustomerProfile>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('tl_profile');
+        if (saved) return JSON.parse(saved);
+      } catch {}
+    }
+    return {
+      name: profile?.name || '',
+      email: profile?.email || user?.email || '',
+      phone: profile?.phone || '',
+      city: profile?.city || '',
+      address: profile?.address || '',
+    };
   });
 
   const [expandedDesigns, setExpandedDesigns] = useState<Record<string, boolean>>({});
   const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   // Sync profile form when profile loads
   React.useEffect(() => {
     if (profile) {
-      setProfileForm({
-        name: profile.name,
-        email: profile.email || user?.email || '',
-        phone: profile.phone,
-        city: profile.city,
-        address: profile.address,
-      });
+      setProfileForm((prev) => ({
+        name: profile.name || prev.name || '',
+        email: profile.email || user?.email || prev.email || '',
+        phone: profile.phone || prev.phone || '',
+        city: profile.city || prev.city || '',
+        address: profile.address || prev.address || '',
+      }));
     }
   }, [profile, user]);
 
@@ -92,7 +102,15 @@ export default function AccountPage() {
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    await updateProfile(profileForm);
+    setIsSavingProfile(true);
+    setSaveSuccess(false);
+    try {
+      await updateProfile(profileForm);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } finally {
+      setIsSavingProfile(false);
+    }
   };
 
   // Filter orders for this customer (by user ID or email)
@@ -618,9 +636,22 @@ export default function AccountPage() {
 
             <button
               type="submit"
-              className="w-full bg-[#141414] hover:bg-[#ff4d1c] text-[#f4f1ea] border-[1.5px] border-[#141414] hover:border-[#ff4d1c] py-3 rounded-full font-bold text-sm transition-colors"
+              disabled={isSavingProfile}
+              className="w-full bg-[#141414] hover:bg-[#ff4d1c] text-[#f4f1ea] border-[1.5px] border-[#141414] hover:border-[#ff4d1c] py-3 rounded-full font-bold text-sm transition-colors flex items-center justify-center gap-2"
             >
-              Save Profile Details
+              {isSavingProfile ? (
+                <>
+                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Saving Details…</span>
+                </>
+              ) : saveSuccess ? (
+                <>
+                  <CheckCircle2 className="w-4 h-4 text-[#ff4d1c]" />
+                  <span>Profile Details Saved ✓</span>
+                </>
+              ) : (
+                <span>Save Profile Details</span>
+              )}
             </button>
           </form>
         </div>

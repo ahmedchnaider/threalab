@@ -28,6 +28,20 @@ export default function CartPage() {
     notes: '',
   });
 
+  // Automatically pre-fill checkout fields from saved customer profile
+  React.useEffect(() => {
+    if (profile) {
+      setFormData((prev) => ({
+        name: prev.name || profile.name || '',
+        email: prev.email || profile.email || user?.email || '',
+        phone: prev.phone || profile.phone || '',
+        city: prev.city || profile.city || '',
+        address: prev.address || profile.address || '',
+        notes: prev.notes || '',
+      }));
+    }
+  }, [profile, user]);
+
   const handleSubmitOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!cart.length) return;
