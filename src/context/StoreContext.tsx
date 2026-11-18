@@ -20,7 +20,7 @@ interface StoreContextType {
   updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
   cancelOrder: (orderId: string) => Promise<void>;
   deleteOrder: (orderId: string) => Promise<void>;
-  deleteOrders: (orderIds: string[]) => Promise<void>;
+  deleteOrders: (orderIds: string[], filterCustomer?: { email?: string; phone?: string; userId?: string }) => Promise<void>;
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
@@ -86,9 +86,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           setSettings(setRes.settings);
           localStorage.setItem('tl_settings', JSON.stringify(setRes.settings));
         }
-        if (ordRes?.orders?.length) {
+        if (Array.isArray(ordRes?.orders)) {
           setOrders(ordRes.orders);
-          localStorage.setItem('tl_orders', JSON.stringify(ordRes.orders));
+          try {
+            localStorage.setItem('tl_orders', JSON.stringify(ordRes.orders));
+          } catch {}
         }
       })
       .finally(() => setIsLoading(false));
@@ -110,18 +112,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
           const delEmail = (parsed?.email || '').trim().toLowerCase();
           const delPhone = normalizePhone(parsed?.phone);
+          const delUid = parsed?.userId;
           const delOrderIds: string[] = Array.isArray(parsed?.orderIds) ? parsed.orderIds : [];
 
-          setOrders((prev) =>
-            prev.filter((o) => {
+          setOrders((prev) => {
+            const updated = prev.filter((o) => {
               if (delOrderIds.includes(o.id)) return false;
+              if (delUid && o.uid && o.uid === delUid) return false;
               const oEmail = (o.customer?.email || '').trim().toLowerCase();
               const oPhone = normalizePhone(o.customer?.phone);
-              if (delEmail && oEmail && oEmail === delEmail) return false;
+              if (delEmail && delEmail !== 'no email' && oEmail === delEmail) return false;
               if (delPhone && oPhone && oPhone === delPhone) return false;
               return true;
-            })
-          );
+            });
+            try {
+              localStorage.setItem('tl_orders', JSON.stringify(updated));
+            } catch {}
+            return updated;
+          });
         } catch {}
       }
     };
@@ -136,18 +144,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
         const delEmail = (detail?.email || '').trim().toLowerCase();
         const delPhone = normalizePhone(detail?.phone);
+        const delUid = detail?.userId;
         const delOrderIds: string[] = Array.isArray(detail?.orderIds) ? detail.orderIds : [];
 
-        setOrders((prev) =>
-          prev.filter((o) => {
+        setOrders((prev) => {
+          const updated = prev.filter((o) => {
             if (delOrderIds.includes(o.id)) return false;
+            if (delUid && o.uid && o.uid === delUid) return false;
             const oEmail = (o.customer?.email || '').trim().toLowerCase();
             const oPhone = normalizePhone(o.customer?.phone);
-            if (delEmail && oEmail && oEmail === delEmail) return false;
+            if (delEmail && delEmail !== 'no email' && oEmail === delEmail) return false;
             if (delPhone && oPhone && oPhone === delPhone) return false;
             return true;
-          })
-        );
+          });
+          try {
+            localStorage.setItem('tl_orders', JSON.stringify(updated));
+          } catch {}
+          return updated;
+        });
       } catch {}
     };
 
@@ -349,11 +363,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     toast('Order deleted');
   };
 
-  const deleteOrders = async (orderIds: string[]) => {
-    if (!orderIds || orderIds.length === 0) return;
-    const idSet = new Set(orderIds);
+  const deleteOrders = async (
+    orderIds: string[],
+    filterCustomer?: { email?: string; phone?: string; userId?: string }
+  ) => {
+    const idSet = new Set(orderIds || []);
+    const cleanEmail = (filterCustomer?.email || '').trim().toLowerCase();
+    const cleanNormPhone = normalizePhone(filterCustomer?.phone);
+    const targetUid = filterCustomer?.userId;
+
     setOrders((prev) => {
-      const updated = prev.filter((o) => !idSet.has(o.id));
+      const updated = prev.filter((o) => {
+        if (idSet.has(o.id)) return false;
+        if (targetUid && o.uid && o.uid === targetUid) return false;
+        const oEmail = (o.customer?.email || '').trim().toLowerCase();
+        const oPhone = normalizePhone(o.customer?.phone);
+        if (cleanEmail && cleanEmail !== 'no email' && oEmail === cleanEmail) return false;
+        if (cleanNormPhone && oPhone && oPhone === cleanNormPhone) return false;
+        return true;
+      });
       try {
         localStorage.setItem('tl_orders', JSON.stringify(updated));
       } catch {}
@@ -361,9 +389,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     });
 
     try {
-      await Promise.allSettled(
-        orderIds.map((id) => fetch(`/api/orders/${id}`, { method: 'DELETE' }))
-      );
+      if (orderIds && orderIds.length > 0) {
+        await Promise.allSettled(
+          orderIds.map((id) => fetch(`/api/orders/${id}`, { method: 'DELETE' }))
+        );
+      }
     } catch {
       // Offline fallback
     }

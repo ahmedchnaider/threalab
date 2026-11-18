@@ -196,15 +196,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           return;
         } else if (data?.profile === null) {
-          // Profile was deleted on server - check if auth user was deleted
-          if (!adminUnlockedRef.current && supabase) {
-            try {
-              const { data: userData, error: userError } = await supabase.auth.getUser();
-              if (userError || !userData?.user) {
-                await logout('Your customer account was deleted.');
-                return;
-              }
-            } catch {}
+          // Profile was deleted on server - log out immediately
+          if (!adminUnlockedRef.current) {
+            await logout('Your customer account was deleted.');
+            return;
           }
         }
       }
@@ -435,6 +430,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await supabase.auth.signOut().catch(() => {});
     }
     const currentEmail = (userRef.current?.email || profileRef.current?.email || '').trim().toLowerCase();
+    const currentNormPhone = normalizePhone(profileRef.current?.phone);
     setUser(null);
     setProfile(null);
     try {
@@ -443,6 +439,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem('tl_checkout_info');
       if (currentEmail) {
         localStorage.removeItem(`tl_profile_${currentEmail}`);
+      }
+
+      // Purge any orders belonging to this customer from localStorage tl_orders
+      const rawOrders = localStorage.getItem('tl_orders');
+      if (rawOrders) {
+        const parsedOrders = JSON.parse(rawOrders);
+        if (Array.isArray(parsedOrders)) {
+          const filteredOrders = parsedOrders.filter((o: any) => {
+            const oEmail = (o.customer?.email || '').trim().toLowerCase();
+            const oPhone = normalizePhone(o.customer?.phone);
+            if (currentEmail && oEmail && oEmail === currentEmail) return false;
+            if (currentNormPhone && oPhone && oPhone === currentNormPhone) return false;
+            return true;
+          });
+          localStorage.setItem('tl_orders', JSON.stringify(filteredOrders));
+        }
       }
     } catch {}
     if (typeof customMessage === 'string' && customMessage) {

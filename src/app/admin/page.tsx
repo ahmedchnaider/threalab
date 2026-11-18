@@ -55,6 +55,8 @@ export default function AdminPage() {
     const cleanEmail = (customer.email || '').trim().toLowerCase();
     const cleanPhone = (customer.phone || '').trim();
     const cleanNormPhone = normalizePhone(cleanPhone);
+    const validEmail = cleanEmail && cleanEmail !== 'no email' ? cleanEmail : undefined;
+    const validPhone = cleanPhone && cleanPhone !== 'no phone' ? cleanPhone : undefined;
 
     // 1. Gather all order IDs associated with this customer
     const matchedOrderIds = new Set<string>();
@@ -75,9 +77,31 @@ export default function AdminPage() {
     const idsToDelete = Array.from(matchedOrderIds);
 
     // 2. Immediately delete customer's orders from local store state & localStorage cache
-    if (idsToDelete.length > 0) {
-      await deleteOrders(idsToDelete);
-    }
+    await deleteOrders(idsToDelete, {
+      email: validEmail,
+      phone: validPhone,
+      userId: customer.userId,
+    });
+
+    // Explicitly update localStorage tl_orders in this window
+    try {
+      const rawOrders = localStorage.getItem('tl_orders');
+      if (rawOrders) {
+        const parsed = JSON.parse(rawOrders);
+        if (Array.isArray(parsed)) {
+          const filtered = parsed.filter((o: any) => {
+            if (idsToDelete.includes(o.id)) return false;
+            if (customer.userId && o.uid && o.uid === customer.userId) return false;
+            const oEmail = (o.customer?.email || '').trim().toLowerCase();
+            const oPhone = normalizePhone(o.customer?.phone);
+            if (validEmail && oEmail === validEmail) return false;
+            if (cleanNormPhone && oPhone === cleanNormPhone) return false;
+            return true;
+          });
+          localStorage.setItem('tl_orders', JSON.stringify(filtered));
+        }
+      }
+    } catch {}
 
     // 3. Delete customer account, auth user, and orders from backend
     try {
@@ -96,11 +120,10 @@ export default function AdminPage() {
 
     // 4. Broadcast deletion across all tabs/windows (logs customer out without affecting admin)
     try {
-      const validEmail = cleanEmail && cleanEmail !== 'no email' ? cleanEmail : undefined;
-      const validPhone = cleanPhone && cleanPhone !== 'no phone' ? cleanPhone : undefined;
       const payload = {
         email: validEmail,
         phone: validPhone,
+        userId: customer.userId,
         orderIds: idsToDelete.length > 0 ? idsToDelete : undefined,
         time: Date.now(),
       };
@@ -113,9 +136,33 @@ export default function AdminPage() {
       // If active customer in this browser session matches the deleted customer, reset customer auth
       const activeEmail = (user?.email || profile?.email || '').trim().toLowerCase();
       const activeNormPhone = normalizePhone(profile?.phone);
-      const matchesEmail = Boolean(validEmail && activeEmail === validEmail);
-      const matchesPhone = Boolean(cleanNormPhone && activeNormPhone && cleanNormPhone === activeNormPhone);
-      if (matchesEmail || matchesPhone) {
+      let matchesSession = Boolean(
+        (validEmail && activeEmail === validEmail) ||
+        (cleanNormPhone && activeNormPhone && cleanNormPhone === activeNormPhone)
+      );
+
+      // Check localStorage cached customer profile as well
+      try {
+        const savedUserStr = localStorage.getItem('tl_user');
+        const savedProfileStr = localStorage.getItem('tl_profile');
+        if (savedUserStr) {
+          const u = JSON.parse(savedUserStr);
+          if (validEmail && u.email && u.email.toLowerCase() === validEmail) matchesSession = true;
+          if (customer.userId && u.id && u.id === customer.userId) matchesSession = true;
+        }
+        if (savedProfileStr) {
+          const p = JSON.parse(savedProfileStr);
+          if (validEmail && p.email && p.email.toLowerCase() === validEmail) matchesSession = true;
+          if (cleanNormPhone && normalizePhone(p.phone) === cleanNormPhone) matchesSession = true;
+        }
+      } catch {}
+
+      if (matchesSession) {
+        try {
+          localStorage.removeItem('tl_user');
+          localStorage.removeItem('tl_profile');
+          localStorage.removeItem('tl_checkout_info');
+        } catch {}
         await logout('Customer account and orders were deleted.');
       }
 
