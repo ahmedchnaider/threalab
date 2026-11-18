@@ -9,6 +9,15 @@ import { formatMediaUrl } from '@/lib/garments';
 import { LogOut, Eye, CheckCircle2, XCircle, Clock, Truck, Package, Mail, KeyRound, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 
+function normalizePhone(p?: string | null): string {
+  if (!p) return '';
+  const digits = p.replace(/\D/g, '');
+  if (digits.startsWith('216') && digits.length === 11) {
+    return digits.slice(3);
+  }
+  return digits;
+}
+
 export default function AccountPage() {
   const {
     user,
@@ -185,10 +194,16 @@ export default function AccountPage() {
     } catch {}
   };
 
-  // Filter orders for this customer (by user ID or email)
+  // Filter orders for this customer (by user ID, email, or phone)
   const myOrders = orders.filter((o) => {
-    if (user && o.uid === user.id) return true;
-    if (profile?.email && o.customer?.email?.toLowerCase() === profile.email.toLowerCase()) return true;
+    if (user && o.uid && o.uid === user.id) return true;
+    const currentEmail = (profileForm.email || profile?.email || user?.email || '').trim().toLowerCase();
+    const currentNormPhone = normalizePhone(profileForm.phone || profile?.phone);
+    const oEmail = (o.customer?.email || '').trim().toLowerCase();
+    const oNormPhone = normalizePhone(o.customer?.phone);
+
+    if (currentEmail && oEmail && oEmail === currentEmail) return true;
+    if (currentNormPhone && oNormPhone && currentNormPhone === oNormPhone) return true;
     return false;
   });
 

@@ -32,6 +32,15 @@ async function hashPw(pw: string): Promise<string> {
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+function normalizePhone(p?: string | null): string {
+  if (!p) return '';
+  const digits = p.replace(/\D/g, '');
+  if (digits.startsWith('216') && digits.length === 11) {
+    return digits.slice(3);
+  }
+  return digits;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
@@ -64,20 +73,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {}
 
     // Listen for account deletion broadcasts across all tabs/windows and in current window
-    const handleDeletedAccount = (data: { email?: string; phone?: string }) => {
+    const handleDeletedAccount = (data: { email?: string; phone?: string; orderIds?: string[] }) => {
       // Never log out the store administrator
       if (adminUnlockedRef.current) return;
 
       const activeEmail = (userRef.current?.email || profileRef.current?.email || '').trim().toLowerCase();
-      const activePhone = (profileRef.current?.phone || '').trim();
+      const activeNormPhone = normalizePhone(profileRef.current?.phone);
       const delEmail = (data?.email || '').trim().toLowerCase();
-      const delPhone = (data?.phone || '').trim();
+      const delNormPhone = normalizePhone(data?.phone);
 
       const matchesEmail = Boolean(delEmail && activeEmail && activeEmail === delEmail);
-      const matchesPhone = Boolean(delPhone && activePhone && activePhone === delPhone);
+      const matchesPhone = Boolean(delNormPhone && activeNormPhone && activeNormPhone === delNormPhone);
 
       if (matchesEmail || matchesPhone) {
-        logout('Your customer account was deleted.');
+        logout('Your customer account was deleted and you have been logged out.');
       }
     };
 
@@ -465,6 +474,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const payload = {
         email: targetEmail || undefined,
         phone: targetPhone || undefined,
+        orderIds: orderIds && orderIds.length > 0 ? orderIds : undefined,
         time: Date.now(),
       };
       localStorage.setItem('tl_deleted_account', JSON.stringify(payload));

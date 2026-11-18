@@ -14,6 +14,15 @@ import { Lock } from 'lucide-react';
 
 type AdminTab = 'products' | 'orders' | 'customers' | 'designs' | 'store';
 
+function normalizePhone(p?: string | null): string {
+  if (!p) return '';
+  const digits = p.replace(/\D/g, '');
+  if (digits.startsWith('216') && digits.length === 11) {
+    return digits.slice(3);
+  }
+  return digits;
+}
+
 export default function AdminPage() {
   const { adminUnlocked, lockAdmin, user, profile, logout } = useAuth();
   const {
@@ -38,23 +47,28 @@ export default function AdminPage() {
   }
 
   const handleDeleteCustomerAccount = async (customer: {
+    userId?: string;
     email?: string;
     phone?: string;
     orders?: Order[];
   }) => {
     const cleanEmail = (customer.email || '').trim().toLowerCase();
     const cleanPhone = (customer.phone || '').trim();
+    const cleanNormPhone = normalizePhone(cleanPhone);
 
     // 1. Gather all order IDs associated with this customer
     const matchedOrderIds = new Set<string>();
     (customer.orders || []).forEach((o) => matchedOrderIds.add(o.id));
     orders.forEach((o) => {
-      const oEmail = (o.customer.email || '').trim().toLowerCase();
-      const oPhone = (o.customer.phone || '').trim();
+      const oEmail = (o.customer?.email || '').trim().toLowerCase();
+      const oNormPhone = normalizePhone(o.customer?.phone);
+      if (customer.userId && o.uid && o.uid === customer.userId) {
+        matchedOrderIds.add(o.id);
+      }
       if (cleanEmail && cleanEmail !== 'no email' && oEmail === cleanEmail) {
         matchedOrderIds.add(o.id);
       }
-      if (cleanPhone && cleanPhone !== 'no phone' && oPhone === cleanPhone) {
+      if (cleanNormPhone && oNormPhone === cleanNormPhone) {
         matchedOrderIds.add(o.id);
       }
     });
@@ -70,6 +84,7 @@ export default function AdminPage() {
       const q = new URLSearchParams();
       if (cleanEmail && cleanEmail !== 'no email') q.set('email', cleanEmail);
       if (cleanPhone && cleanPhone !== 'no phone') q.set('phone', cleanPhone);
+      if (customer.userId) q.set('userId', customer.userId);
       if (idsToDelete.length > 0) q.set('orderIds', idsToDelete.join(','));
 
       await fetch(`/api/profile?${q.toString()}`, {
@@ -86,6 +101,7 @@ export default function AdminPage() {
       const payload = {
         email: validEmail,
         phone: validPhone,
+        orderIds: idsToDelete.length > 0 ? idsToDelete : undefined,
         time: Date.now(),
       };
 
@@ -96,9 +112,11 @@ export default function AdminPage() {
 
       // If active customer in this browser session matches the deleted customer, reset customer auth
       const activeEmail = (user?.email || profile?.email || '').trim().toLowerCase();
-      const activePhone = (profile?.phone || '').trim();
-      if ((validEmail && activeEmail === validEmail) || (validPhone && activePhone === validPhone)) {
-        await logout('Customer account was deleted.');
+      const activeNormPhone = normalizePhone(profile?.phone);
+      const matchesEmail = Boolean(validEmail && activeEmail === validEmail);
+      const matchesPhone = Boolean(cleanNormPhone && activeNormPhone && cleanNormPhone === activeNormPhone);
+      if (matchesEmail || matchesPhone) {
+        await logout('Customer account and orders were deleted.');
       }
 
       if (typeof window !== 'undefined') {

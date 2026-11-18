@@ -6,6 +6,15 @@ function isUuid(str: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 }
 
+function normalizePhone(p?: string | null): string {
+  if (!p) return '';
+  const digits = p.replace(/\D/g, '');
+  if (digits.startsWith('216') && digits.length === 11) {
+    return digits.slice(3);
+  }
+  return digits;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -275,14 +284,16 @@ export async function DELETE(request: NextRequest) {
     // 3. If still not resolved and phone provided, search by phone in profiles
     if (!resolvedUserId && phone) {
       try {
-        const { data: profileByPhone } = await admin
+        const normPhone = normalizePhone(phone);
+        const { data: allProfiles } = await admin
           .from('profiles')
-          .select('user_id')
-          .eq('phone', phone)
-          .maybeSingle();
+          .select('user_id, phone');
 
-        if (profileByPhone?.user_id) {
-          resolvedUserId = profileByPhone.user_id;
+        const matchedProfile = (allProfiles || []).find(
+          (p) => normalizePhone(p.phone) === normPhone
+        );
+        if (matchedProfile?.user_id) {
+          resolvedUserId = matchedProfile.user_id;
         }
       } catch {}
     }
@@ -295,6 +306,16 @@ export async function DELETE(request: NextRequest) {
       await admin.from('profiles').delete().ilike('email', email);
     }
     if (phone) {
+      const normPhone = normalizePhone(phone);
+      try {
+        const { data: allProfiles } = await admin.from('profiles').select('user_id, phone');
+        const idsToDelete = (allProfiles || [])
+          .filter((p) => normalizePhone(p.phone) === normPhone)
+          .map((p) => p.user_id);
+        for (const uid of idsToDelete) {
+          await admin.from('profiles').delete().eq('user_id', uid);
+        }
+      } catch {}
       await admin.from('profiles').delete().eq('phone', phone);
     }
 
@@ -344,12 +365,13 @@ export async function DELETE(request: NextRequest) {
     // C. Orders matched by customer email or phone in JSON data
     if (email || phone) {
       try {
-        const { data: allOrders } = await admin.from('orders').select('id, data, user_id');
+        const normTargetPhone = normalizePhone(phone);
+        const { data: allOrders } = await admin.from('orders').select('id, data, user_id').limit(5000);
         const matchedOrders = (allOrders || []).filter((o: any) => {
           const cEmail = (o.data?.customer?.email || '').trim().toLowerCase();
-          const cPhone = (o.data?.customer?.phone || '').trim();
+          const cNormPhone = normalizePhone(o.data?.customer?.phone);
           if (email && cEmail === email) return true;
-          if (phone && cPhone === phone) return true;
+          if (normTargetPhone && cNormPhone && normTargetPhone === cNormPhone) return true;
           return false;
         });
 

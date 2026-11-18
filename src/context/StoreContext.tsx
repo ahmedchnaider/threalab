@@ -25,6 +25,15 @@ interface StoreContextType {
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
+function normalizePhone(p?: string | null): string {
+  if (!p) return '';
+  const digits = p.replace(/\D/g, '');
+  if (digits.startsWith('216') && digits.length === 11) {
+    return digits.slice(3);
+  }
+  return digits;
+}
+
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
   const [designs, setDesigns] = useState<Design[]>(INITIAL_DESIGNS);
@@ -83,6 +92,66 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
       })
       .finally(() => setIsLoading(false));
+
+    // Listen for order deletions and account deletions across all tabs and current window
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'tl_orders' && e.newValue) {
+        try {
+          setOrders(JSON.parse(e.newValue));
+        } catch {}
+      }
+      if (e.key === 'tl_deleted_account' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          const delEmail = (parsed?.email || '').trim().toLowerCase();
+          const delPhone = normalizePhone(parsed?.phone);
+          const delOrderIds: string[] = Array.isArray(parsed?.orderIds) ? parsed.orderIds : [];
+
+          setOrders((prev) =>
+            prev.filter((o) => {
+              if (delOrderIds.includes(o.id)) return false;
+              const oEmail = (o.customer?.email || '').trim().toLowerCase();
+              const oPhone = normalizePhone(o.customer?.phone);
+              if (delEmail && oEmail && oEmail === delEmail) return false;
+              if (delPhone && oPhone && oPhone === delPhone) return false;
+              return true;
+            })
+          );
+        } catch {}
+      }
+    };
+
+    const handleCustom = (e: Event) => {
+      try {
+        const detail = (e as CustomEvent).detail;
+        const delEmail = (detail?.email || '').trim().toLowerCase();
+        const delPhone = normalizePhone(detail?.phone);
+        const delOrderIds: string[] = Array.isArray(detail?.orderIds) ? detail.orderIds : [];
+
+        setOrders((prev) =>
+          prev.filter((o) => {
+            if (delOrderIds.includes(o.id)) return false;
+            const oEmail = (o.customer?.email || '').trim().toLowerCase();
+            const oPhone = normalizePhone(o.customer?.phone);
+            if (delEmail && oEmail && oEmail === delEmail) return false;
+            if (delPhone && oPhone && oPhone === delPhone) return false;
+            return true;
+          })
+        );
+      } catch {}
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', handleStorage);
+      window.addEventListener('tl_deleted_account', handleCustom);
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('storage', handleStorage);
+        window.removeEventListener('tl_deleted_account', handleCustom);
+      }
+    };
   }, []);
 
   const saveProduct = async (p: Product) => {

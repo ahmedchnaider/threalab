@@ -5,7 +5,17 @@ import { Order } from '@/lib/types';
 import { Search, Trash2 } from 'lucide-react';
 import { useToast } from '@/context/ToastContext';
 
-interface CustomerStat {
+function normalizePhone(p?: string | null): string {
+  if (!p) return '';
+  const digits = p.replace(/\D/g, '');
+  if (digits.startsWith('216') && digits.length === 11) {
+    return digits.slice(3);
+  }
+  return digits;
+}
+
+export interface CustomerStat {
+  userId?: string;
   email: string;
   name: string;
   phone: string;
@@ -63,16 +73,18 @@ export function CustomersManager({
       }
       setDbProfiles((prev) =>
         prev.filter((p) => {
+          if (customer.userId && p.user_id && p.user_id === customer.userId) return false;
           const pEmail = (p.email || '').trim().toLowerCase();
-          const pPhone = (p.phone || '').trim();
+          const pPhone = normalizePhone(p.phone);
           const cEmail = (customer.email || '').trim().toLowerCase();
+          const cPhone = normalizePhone(customer.phone);
           if (cEmail && cEmail !== 'no email' && pEmail === cEmail) return false;
-          if (customer.phone && customer.phone !== 'no phone' && pPhone === customer.phone) return false;
+          if (cPhone && pPhone === cPhone) return false;
           return true;
         })
       );
       setConfirmDeleteId(null);
-      toast('Customer account deleted');
+      toast('Customer account and orders deleted');
     } catch {
       toast('Failed to delete customer account');
     } finally {
@@ -88,6 +100,7 @@ export function CustomersManager({
     const email = (p.email || '').trim().toLowerCase();
     if (!email) continue;
     customersMap.set(email, {
+      userId: p.user_id,
       email: p.email,
       name: p.name || 'Anonymous',
       phone: p.phone || 'No phone',
@@ -102,17 +115,30 @@ export function CustomersManager({
 
   // 2. Merge order stats
   for (const o of orders) {
-    const email = o.customer.email?.trim().toLowerCase() || o.customer.phone || 'guest';
-    const existing = customersMap.get(email);
+    const oEmail = (o.customer?.email || '').trim().toLowerCase();
+    const oPhone = normalizePhone(o.customer?.phone);
+
+    let existing = (oEmail && oEmail !== 'no email') ? customersMap.get(oEmail) : undefined;
+    if (!existing && oPhone) {
+      existing = Array.from(customersMap.values()).find(
+        (c) => normalizePhone(c.phone) === oPhone
+      );
+    }
+    if (!existing && o.uid) {
+      existing = Array.from(customersMap.values()).find((c) => c.userId && c.userId === o.uid);
+    }
+
     const orderTotal = o.status !== 'cancelled' ? o.total : 0;
+    const key = (oEmail && oEmail !== 'no email') ? oEmail : (oPhone || o.id);
 
     if (!existing) {
-      customersMap.set(email, {
-        email: o.customer.email || 'No email',
-        name: o.customer.name || 'Anonymous',
-        phone: o.customer.phone || 'No phone',
-        city: o.customer.city || 'No city',
-        address: o.customer.address || '',
+      customersMap.set(key, {
+        userId: o.uid,
+        email: o.customer?.email || 'No email',
+        name: o.customer?.name || 'Anonymous',
+        phone: o.customer?.phone || 'No phone',
+        city: o.customer?.city || 'No city',
+        address: o.customer?.address || '',
         orderCount: 1,
         totalSpent: orderTotal,
         lastOrderAt: o.createdAt,
@@ -124,11 +150,13 @@ export function CustomersManager({
       if (o.createdAt > existing.lastOrderAt) {
         existing.lastOrderAt = o.createdAt;
       }
-      if (o.customer.name && existing.name === 'Anonymous') existing.name = o.customer.name;
-      if (o.customer.phone && existing.phone === 'No phone') existing.phone = o.customer.phone;
-      if (o.customer.city && existing.city === 'No city') existing.city = o.customer.city;
-      if (o.customer.address && !existing.address) existing.address = o.customer.address;
-      existing.orders.push(o);
+      if (o.customer?.name && existing.name === 'Anonymous') existing.name = o.customer.name;
+      if (o.customer?.phone && existing.phone === 'No phone') existing.phone = o.customer.phone;
+      if (o.customer?.city && existing.city === 'No city') existing.city = o.customer.city;
+      if (o.customer?.address && !existing.address) existing.address = o.customer.address;
+      if (!existing.orders.some((x) => x.id === o.id)) {
+        existing.orders.push(o);
+      }
     }
   }
 
