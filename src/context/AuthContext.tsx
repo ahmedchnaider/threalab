@@ -40,6 +40,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [adminUnlocked, setAdminUnlocked] = useState(false);
   const { toast } = useToast();
 
+  const userRef = React.useRef(user);
+  const profileRef = React.useRef(profile);
+  const adminUnlockedRef = React.useRef(adminUnlocked);
+  userRef.current = user;
+  profileRef.current = profile;
+  adminUnlockedRef.current = adminUnlocked;
+
   useEffect(() => {
     // Check saved admin unlock state in session
     try {
@@ -52,35 +59,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const savedUser = localStorage.getItem('tl_user');
       const savedProfile = localStorage.getItem('tl_profile');
-      const deletedAccountRaw = localStorage.getItem('tl_deleted_account');
-      let isDeleted = false;
-
-      if (deletedAccountRaw && !adminUnlocked) {
-        try {
-          const parsedDel = JSON.parse(deletedAccountRaw);
-          const uEmail = savedUser ? JSON.parse(savedUser).email : '';
-          const pEmail = savedProfile ? JSON.parse(savedProfile).email : '';
-          const checkEmail = (uEmail || pEmail || '').trim().toLowerCase();
-          const pPhone = savedProfile ? JSON.parse(savedProfile).phone : '';
-          if (checkEmail && parsedDel.email && checkEmail === parsedDel.email.toLowerCase()) {
-            isDeleted = true;
-          }
-          if (pPhone && parsedDel.phone && pPhone === parsedDel.phone) {
-            isDeleted = true;
-          }
-        } catch {}
-      }
-
-      if (isDeleted) {
-        localStorage.removeItem('tl_user');
-        localStorage.removeItem('tl_profile');
-        localStorage.removeItem('tl_checkout_info');
-        setUser(null);
-        setProfile(null);
-      } else {
-        if (savedUser) setUser(JSON.parse(savedUser));
-        if (savedProfile) setProfile(JSON.parse(savedProfile));
-      }
+      if (savedUser) setUser(JSON.parse(savedUser));
+      if (savedProfile) setProfile(JSON.parse(savedProfile));
     } catch {}
 
     // Always listen for account deletion broadcasts across all tabs/windows
@@ -88,10 +68,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (e.key === 'tl_deleted_account' && e.newValue) {
         try {
           // Never log out the store administrator
-          if (adminUnlocked) return;
+          if (adminUnlockedRef.current) return;
 
           const parsed = JSON.parse(e.newValue);
-          const activeEmail = (user?.email || profile?.email || '').trim().toLowerCase();
+          const activeEmail = (userRef.current?.email || profileRef.current?.email || '').trim().toLowerCase();
           const matchesEmail = activeEmail && parsed?.email && activeEmail === parsed.email.toLowerCase();
 
           if (matchesEmail) {
@@ -138,7 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         window.removeEventListener('storage', handleStorage);
       }
     };
-  }, [user?.email, profile?.email, adminUnlocked]);
+  }, []);
 
   const fetchSupabaseProfile = async (uid: string, userEmail?: string) => {
     // 1. Try server endpoint
@@ -156,12 +136,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setIsAdmin(true);
           }
           return;
-        } else if (data?.profile === null && (uid || userEmail)) {
-          // Never log out the admin
-          if (adminUnlocked) return;
-          // Otherwise, customer profile was deleted on server! Automatically log customer out
-          logout();
-          return;
         }
       }
     } catch {}
@@ -173,10 +147,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (data && !error) {
           setProfile(data);
           localStorage.setItem('tl_profile', JSON.stringify(data));
-        } else if (!data && !error && uid) {
-          if (adminUnlocked) return;
-          logout();
-          return;
         }
         const adminCheck = await supabase.rpc('is_admin');
         if (adminCheck?.data) {

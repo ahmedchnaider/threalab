@@ -37,20 +37,12 @@ export default function AccountPage() {
   const [authError, setAuthError] = useState('');
 
   // Profile Form state
-  const [profileForm, setProfileForm] = useState<CustomerProfile>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('tl_profile');
-        if (saved) return JSON.parse(saved);
-      } catch {}
-    }
-    return {
-      name: profile?.name || '',
-      email: profile?.email || user?.email || '',
-      phone: profile?.phone || '',
-      city: profile?.city || '',
-      address: profile?.address || '',
-    };
+  const [profileForm, setProfileForm] = useState<CustomerProfile>({
+    name: profile?.name || '',
+    email: profile?.email || user?.email || '',
+    phone: profile?.phone || '',
+    city: profile?.city || '',
+    address: profile?.address || '',
   });
 
   const [expandedDesigns, setExpandedDesigns] = useState<Record<string, boolean>>({});
@@ -70,15 +62,22 @@ export default function AccountPage() {
     }
   };
 
-  // Sync profile form when profile loads
+  // Sync profile form when profile loads (hydration safe)
   React.useEffect(() => {
-    if (profile) {
+    let base = profile;
+    if (!base && typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('tl_profile');
+        if (saved) base = JSON.parse(saved);
+      } catch {}
+    }
+    if (base || user) {
       setProfileForm((prev) => ({
-        name: profile.name || prev.name || '',
-        email: profile.email || user?.email || prev.email || '',
-        phone: profile.phone || prev.phone || '',
-        city: profile.city || prev.city || '',
-        address: profile.address || prev.address || '',
+        name: base?.name || prev.name || '',
+        email: base?.email || user?.email || prev.email || '',
+        phone: base?.phone || prev.phone || '',
+        city: base?.city || prev.city || '',
+        address: base?.address || prev.address || '',
       }));
     }
   }, [profile, user]);
