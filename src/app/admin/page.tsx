@@ -47,7 +47,7 @@ export default function AdminPage() {
       console.error('Failed to delete customer account:', err);
     }
 
-    // 2. Broadcast deletion across all tabs/windows
+    // 2. Broadcast deletion across all tabs/windows (logs customer out)
     try {
       localStorage.setItem(
         'tl_deleted_account',
@@ -56,13 +56,7 @@ export default function AdminPage() {
       localStorage.removeItem(`tl_profile_${cleanEmail}`);
     } catch {}
 
-    // 3. If the deleted customer is currently logged into this browser session, log them out!
-    const activeEmail = (user?.email || profile?.email || '').trim().toLowerCase();
-    if (activeEmail && activeEmail === cleanEmail) {
-      await logout();
-    }
-
-    // 4. Delete customer's orders from local state
+    // 3. Delete customer's orders from local state
     const customerOrders = orders.filter(
       (o) => (o.customer.email || '').toLowerCase() === cleanEmail
     );

@@ -80,11 +80,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const handleStorage = (e: StorageEvent) => {
         if (e.key === 'tl_deleted_account' && e.newValue) {
           try {
+            // Never log out the store administrator
+            if (adminUnlocked) return;
+
             const parsed = JSON.parse(e.newValue);
             const activeEmail = (user?.email || profile?.email || '').trim().toLowerCase();
             if (activeEmail && parsed?.email && activeEmail === parsed.email.toLowerCase()) {
               logout();
-              toast('Your account was deleted.');
+              toast('Your customer account was deleted.');
             }
           } catch {}
         }
@@ -102,7 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } else {
       setIsLoading(false);
     }
-  }, [user?.email, profile?.email]);
+  }, [user?.email, profile?.email, adminUnlocked]);
 
   const fetchSupabaseProfile = async (uid: string, userEmail?: string) => {
     // 1. Try server endpoint
@@ -121,7 +124,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           return;
         } else if (data?.profile === null && (uid || userEmail)) {
-          // Customer profile was deleted on server! Automatically log them out
+          // Never log out the admin
+          if (adminUnlocked) return;
+          // Otherwise, customer profile was deleted on server! Automatically log customer out
           logout();
           return;
         }
@@ -136,6 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setProfile(data);
           localStorage.setItem('tl_profile', JSON.stringify(data));
         } else if (!data && !error && uid) {
+          if (adminUnlocked) return;
           logout();
           return;
         }
@@ -358,15 +364,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const currentEmail = (user?.email || profile?.email || '').trim().toLowerCase();
     setUser(null);
     setProfile(null);
-    setAdminUnlocked(false);
     localStorage.removeItem('tl_user');
     localStorage.removeItem('tl_profile');
     if (currentEmail) {
       localStorage.removeItem(`tl_profile_${currentEmail}`);
     }
-    try {
-      sessionStorage.removeItem('tl_admin');
-    } catch {}
     toast('You have logged out');
   };
 
