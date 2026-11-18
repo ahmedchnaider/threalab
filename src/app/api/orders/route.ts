@@ -26,12 +26,9 @@ export async function GET(request: NextRequest) {
     isAdmin = Boolean(profile?.is_admin);
   }
 
-  // If admin, return all orders; if user, return user's orders
+  // If customer is logged in and not admin, return only their orders; otherwise return all store orders
   let query = admin.from('orders').select('*').order('created_at', { ascending: false });
-  if (!isAdmin) {
-    if (!user) {
-      return NextResponse.json({ orders: [] });
-    }
+  if (user && !isAdmin) {
     query = query.eq('user_id', user.id);
   }
 
