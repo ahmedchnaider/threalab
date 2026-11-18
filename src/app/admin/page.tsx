@@ -28,6 +28,7 @@ export default function AdminPage() {
     updateOrderStatus,
     deleteOrder,
     deleteOrders,
+    deleteCustomerOrders,
   } = useStore();
 
   const [activeTab, setActiveTab] = useState<AdminTab>('products');
@@ -59,7 +60,9 @@ export default function AdminPage() {
     const idsToDelete = Array.from(matchedOrderIds);
 
     // 2. Immediately delete customer's orders from local store state & localStorage cache
-    if (idsToDelete.length > 0) {
+    if (deleteCustomerOrders) {
+      await deleteCustomerOrders(cleanEmail, cleanPhone, idsToDelete);
+    } else if (idsToDelete.length > 0) {
       await deleteOrders(idsToDelete);
     }
 
@@ -79,12 +82,19 @@ export default function AdminPage() {
 
     // 4. Broadcast deletion across all tabs/windows (logs customer out without affecting admin)
     try {
-      if (cleanEmail) {
+      if (cleanEmail || cleanPhone || idsToDelete.length > 0) {
         localStorage.setItem(
           'tl_deleted_account',
-          JSON.stringify({ email: cleanEmail, time: Date.now() })
+          JSON.stringify({
+            email: cleanEmail,
+            phone: cleanPhone,
+            orderIds: idsToDelete,
+            time: Date.now(),
+          })
         );
-        localStorage.removeItem(`tl_profile_${cleanEmail}`);
+        if (cleanEmail) {
+          localStorage.removeItem(`tl_profile_${cleanEmail}`);
+        }
       }
     } catch {}
   };

@@ -17,7 +17,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
   updateProfile: (profile: CustomerProfile) => Promise<void>;
   getProfileByEmail: (email: string) => Promise<CustomerProfile | null>;
-  deleteAccount: (email?: string) => Promise<boolean>;
+  deleteAccount: (email?: string, orderIds?: string[], phone?: string) => Promise<boolean>;
   unlockAdmin: (password: string) => Promise<boolean>;
   lockAdmin: () => void;
 }
@@ -52,11 +52,63 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const savedUser = localStorage.getItem('tl_user');
       const savedProfile = localStorage.getItem('tl_profile');
-      if (savedUser) setUser(JSON.parse(savedUser));
-      if (savedProfile) setProfile(JSON.parse(savedProfile));
+      const deletedAccountRaw = localStorage.getItem('tl_deleted_account');
+      let isDeleted = false;
+
+      if (deletedAccountRaw && !adminUnlocked) {
+        try {
+          const parsedDel = JSON.parse(deletedAccountRaw);
+          const uEmail = savedUser ? JSON.parse(savedUser).email : '';
+          const pEmail = savedProfile ? JSON.parse(savedProfile).email : '';
+          const checkEmail = (uEmail || pEmail || '').trim().toLowerCase();
+          const pPhone = savedProfile ? JSON.parse(savedProfile).phone : '';
+          if (checkEmail && parsedDel.email && checkEmail === parsedDel.email.toLowerCase()) {
+            isDeleted = true;
+          }
+          if (pPhone && parsedDel.phone && pPhone === parsedDel.phone) {
+            isDeleted = true;
+          }
+        } catch {}
+      }
+
+      if (isDeleted) {
+        localStorage.removeItem('tl_user');
+        localStorage.removeItem('tl_profile');
+        localStorage.removeItem('tl_checkout_info');
+        setUser(null);
+        setProfile(null);
+      } else {
+        if (savedUser) setUser(JSON.parse(savedUser));
+        if (savedProfile) setProfile(JSON.parse(savedProfile));
+      }
     } catch {}
 
+    // Always listen for account deletion broadcasts across all tabs/windows
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'tl_deleted_account' && e.newValue) {
+        try {
+          // Never log out the store administrator
+          if (adminUnlocked) return;
+
+          const parsed = JSON.parse(e.newValue);
+          const activeEmail = (user?.email || profile?.email || '').trim().toLowerCase();
+          const activePhone = (profile?.phone || '').trim();
+          const matchesEmail = activeEmail && parsed?.email && activeEmail === parsed.email.toLowerCase();
+          const matchesPhone = activePhone && parsed?.phone && activePhone === parsed.phone;
+
+          if (matchesEmail || matchesPhone) {
+            logout();
+            toast('Your customer account, orders, and info have been deleted.');
+          }
+        } catch {}
+      }
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', handleStorage);
+    }
+
     // Check local session or Supabase
+    let authListener: any = null;
     if (isSupabaseConfigured && supabase) {
       supabase.auth.getSession().then(({ data: { session } }) => {
         if (session?.user) {
@@ -66,7 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsLoading(false);
       });
 
-      const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      const { data } = supabase.auth.onAuthStateChange((_event, session) => {
         if (session?.user) {
           setUser({ id: session.user.id, email: session.user.email });
           fetchSupabaseProfile(session.user.id, session.user.email);
@@ -75,36 +127,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setProfile(null);
         }
       });
-
-      // Listen for account deletion broadcasts from admin panel or other tabs
-      const handleStorage = (e: StorageEvent) => {
-        if (e.key === 'tl_deleted_account' && e.newValue) {
-          try {
-            // Never log out the store administrator
-            if (adminUnlocked) return;
-
-            const parsed = JSON.parse(e.newValue);
-            const activeEmail = (user?.email || profile?.email || '').trim().toLowerCase();
-            if (activeEmail && parsed?.email && activeEmail === parsed.email.toLowerCase()) {
-              logout();
-              toast('Your customer account was deleted.');
-            }
-          } catch {}
-        }
-      };
-      if (typeof window !== 'undefined') {
-        window.addEventListener('storage', handleStorage);
-      }
-
-      return () => {
-        authListener.subscription.unsubscribe();
-        if (typeof window !== 'undefined') {
-          window.removeEventListener('storage', handleStorage);
-        }
-      };
+      authListener = data;
     } else {
       setIsLoading(false);
     }
+
+    return () => {
+      if (authListener?.subscription) {
+        authListener.subscription.unsubscribe();
+      }
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('storage', handleStorage);
+      }
+    };
   }, [user?.email, profile?.email, adminUnlocked]);
 
   const fetchSupabaseProfile = async (uid: string, userEmail?: string) => {
@@ -364,38 +399,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const currentEmail = (user?.email || profile?.email || '').trim().toLowerCase();
     setUser(null);
     setProfile(null);
-    localStorage.removeItem('tl_user');
-    localStorage.removeItem('tl_profile');
-    if (currentEmail) {
-      localStorage.removeItem(`tl_profile_${currentEmail}`);
-    }
+    try {
+      localStorage.removeItem('tl_user');
+      localStorage.removeItem('tl_profile');
+      localStorage.removeItem('tl_checkout_info');
+      if (currentEmail) {
+        localStorage.removeItem(`tl_profile_${currentEmail}`);
+      }
+    } catch {}
     toast('You have logged out');
   };
 
-  const deleteAccount = async (emailToDelete?: string): Promise<boolean> => {
+  const deleteAccount = async (
+    emailToDelete?: string,
+    orderIds?: string[],
+    phoneToDelete?: string
+  ): Promise<boolean> => {
     const targetEmail = (emailToDelete || user?.email || profile?.email || '').trim().toLowerCase();
-    if (!targetEmail) return false;
+    const targetPhone = (phoneToDelete || profile?.phone || '').trim();
+    const uid = user?.id || '';
 
     // 1. Delete on server API
     try {
-      await fetch(
-        `/api/profile?email=${encodeURIComponent(targetEmail)}&userId=${encodeURIComponent(user?.id || '')}`,
-        { method: 'DELETE' }
-      );
-    } catch {}
+      const q = new URLSearchParams();
+      if (targetEmail) q.set('email', targetEmail);
+      if (uid) q.set('userId', uid);
+      if (targetPhone) q.set('phone', targetPhone);
+      if (orderIds && orderIds.length > 0) q.set('orderIds', orderIds.join(','));
+
+      await fetch(`/api/profile?${q.toString()}`, { method: 'DELETE' });
+    } catch (err) {
+      console.error('Delete account API error:', err);
+    }
 
     // 2. Broadcast deletion across all browser windows / tabs
     try {
       localStorage.setItem(
         'tl_deleted_account',
-        JSON.stringify({ email: targetEmail, time: Date.now() })
+        JSON.stringify({
+          email: targetEmail,
+          phone: targetPhone,
+          orderIds: orderIds || [],
+          time: Date.now(),
+        })
       );
-      localStorage.removeItem(`tl_profile_${targetEmail}`);
+      if (targetEmail) {
+        localStorage.removeItem(`tl_profile_${targetEmail}`);
+      }
+      localStorage.removeItem('tl_user');
+      localStorage.removeItem('tl_profile');
+      localStorage.removeItem('tl_checkout_info');
     } catch {}
 
-    // 3. Log out immediately
+    // 3. Log out immediately and reset customer state
     await logout();
-    toast('Account deleted and logged out.');
+    toast('Your account, info, and orders have been deleted.');
     return true;
   };
 

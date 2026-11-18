@@ -21,6 +21,11 @@ interface StoreContextType {
   cancelOrder: (orderId: string) => Promise<void>;
   deleteOrder: (orderId: string) => Promise<void>;
   deleteOrders: (orderIds: string[]) => Promise<void>;
+  deleteCustomerOrders: (
+    customerEmail?: string,
+    customerPhone?: string,
+    explicitOrderIds?: string[]
+  ) => Promise<void>;
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
@@ -34,6 +39,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
 
   useEffect(() => {
+    const sanitizeDeleted = (rawOrders: Order[]): Order[] => {
+      try {
+        const deletedRaw = localStorage.getItem('tl_deleted_account');
+        if (!deletedRaw) return rawOrders;
+        const parsed = JSON.parse(deletedRaw);
+        const delEmail = (parsed.email || '').trim().toLowerCase();
+        const delPhone = (parsed.phone || '').trim();
+        const delIds: string[] = parsed.orderIds || [];
+
+        return rawOrders.filter((o) => {
+          if (delIds.includes(o.id)) return false;
+          const oEmail = (o.customer?.email || '').trim().toLowerCase();
+          const oPhone = (o.customer?.phone || '').trim();
+          if (delEmail && oEmail === delEmail) return false;
+          if (delPhone && oPhone && oPhone === delPhone) return false;
+          return true;
+        });
+      } catch {
+        return rawOrders;
+      }
+    };
+
     // 1. Load from localStorage cache first for instantaneous UI
     try {
       const savedProds = localStorage.getItem('tl_products');
@@ -44,12 +71,43 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (savedProds) setProducts(JSON.parse(savedProds));
       if (savedDesigns) setDesigns(JSON.parse(savedDesigns));
       if (savedSettings) setSettings(JSON.parse(savedSettings));
-      if (savedOrders) setOrders(JSON.parse(savedOrders));
+      if (savedOrders) setOrders(sanitizeDeleted(JSON.parse(savedOrders)));
     } catch {
       // Ignore
     }
 
-    // 2. Fetch from backend API routes
+    // 2. Storage event listener for cross-tab customer account & order deletions
+    const handleStorageOrders = (e: StorageEvent) => {
+      if (e.key === 'tl_deleted_account' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          const delEmail = (parsed.email || '').trim().toLowerCase();
+          const delPhone = (parsed.phone || '').trim();
+          const delIds: string[] = parsed.orderIds || [];
+
+          setOrders((prev) => {
+            const updated = prev.filter((o) => {
+              if (delIds.includes(o.id)) return false;
+              const oEmail = (o.customer?.email || '').trim().toLowerCase();
+              const oPhone = (o.customer?.phone || '').trim();
+              if (delEmail && oEmail === delEmail) return false;
+              if (delPhone && oPhone && oPhone === delPhone) return false;
+              return true;
+            });
+            try {
+              localStorage.setItem('tl_orders', JSON.stringify(updated));
+            } catch {}
+            return updated;
+          });
+        } catch {}
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', handleStorageOrders);
+    }
+
+    // 3. Fetch from backend API routes
     Promise.all([
       fetch('/api/products')
         .then((r) => r.json())
@@ -78,11 +136,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           localStorage.setItem('tl_settings', JSON.stringify(setRes.settings));
         }
         if (ordRes?.orders?.length) {
-          setOrders(ordRes.orders);
-          localStorage.setItem('tl_orders', JSON.stringify(ordRes.orders));
+          const cleaned = sanitizeDeleted(ordRes.orders);
+          setOrders(cleaned);
+          localStorage.setItem('tl_orders', JSON.stringify(cleaned));
         }
       })
       .finally(() => setIsLoading(false));
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('storage', handleStorageOrders);
+      }
+    };
   }, []);
 
   const saveProduct = async (p: Product) => {
@@ -290,6 +355,48 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const deleteCustomerOrders = async (
+    customerEmail?: string,
+    customerPhone?: string,
+    explicitOrderIds?: string[]
+  ) => {
+    const cleanEmail = (customerEmail || '').trim().toLowerCase();
+    const cleanPhone = (customerPhone || '').trim();
+    const idSet = new Set(explicitOrderIds || []);
+
+    const removedIds: string[] = [...idSet];
+    setOrders((prev) => {
+      const updated = prev.filter((o) => {
+        if (idSet.has(o.id)) return false;
+        const oEmail = (o.customer?.email || '').trim().toLowerCase();
+        const oPhone = (o.customer?.phone || '').trim();
+        if (cleanEmail && oEmail === cleanEmail) {
+          removedIds.push(o.id);
+          return false;
+        }
+        if (cleanPhone && oPhone && oPhone === cleanPhone) {
+          removedIds.push(o.id);
+          return false;
+        }
+        return true;
+      });
+      try {
+        localStorage.setItem('tl_orders', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    try {
+      if (removedIds.length > 0) {
+        await Promise.allSettled(
+          removedIds.map((id) => fetch(`/api/orders/${id}`, { method: 'DELETE' }))
+        );
+      }
+    } catch {
+      // Offline fallback
+    }
+  };
+
   return (
     <StoreContext.Provider
       value={{
@@ -308,6 +415,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         cancelOrder,
         deleteOrder,
         deleteOrders,
+        deleteCustomerOrders,
       }}
     >
       {children}

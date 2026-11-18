@@ -272,6 +272,21 @@ export async function DELETE(request: NextRequest) {
       } catch {}
     }
 
+    // 3. If still not resolved and phone provided, search by phone in profiles
+    if (!resolvedUserId && phone) {
+      try {
+        const { data: profileByPhone } = await admin
+          .from('profiles')
+          .select('user_id')
+          .eq('phone', phone)
+          .maybeSingle();
+
+        if (profileByPhone?.user_id) {
+          resolvedUserId = profileByPhone.user_id;
+        }
+      } catch {}
+    }
+
     // Helper to safely purge an order and its associated artwork/mockup storage files
     const purgedOrderIds = new Set<string>();
     const purgeOrder = async (orderId: string, orderUserId?: string | null) => {

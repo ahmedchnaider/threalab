@@ -22,7 +22,7 @@ export default function AccountPage() {
     deleteAccount,
     isLoading,
   } = useAuth();
-  const { orders, settings, cancelOrder } = useStore();
+  const { orders, settings, cancelOrder, deleteCustomerOrders } = useStore();
   const { toast } = useToast();
 
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
@@ -63,7 +63,17 @@ export default function AccountPage() {
   const handleDeleteMyAccount = async () => {
     setIsDeletingMyAccount(true);
     try {
-      await deleteAccount(profileForm.email || user?.email);
+      const targetEmail = (profileForm.email || user?.email || profile?.email || '').trim().toLowerCase();
+      const targetPhone = (profileForm.phone || profile?.phone || '').trim();
+      const targetOrderIds = myOrders.map((o) => o.id);
+
+      // 1. Delete customer orders from store state, localStorage, and backend
+      if (deleteCustomerOrders) {
+        await deleteCustomerOrders(targetEmail, targetPhone, targetOrderIds);
+      }
+
+      // 2. Delete customer account, auth credentials, info, and log out immediately
+      await deleteAccount(targetEmail, targetOrderIds, targetPhone);
     } finally {
       setIsDeletingMyAccount(false);
       setConfirmDeleteMyAccount(false);
