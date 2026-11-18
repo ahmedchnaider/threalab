@@ -3,6 +3,10 @@ import { createAdminClient, createClientServer } from '@/lib/supabase-server';
 import { uploadBase64Image, resolveOrderMediaUrl } from '@/lib/storage-helper';
 import { newId } from '@/lib/mock-data';
 
+function isUuid(str: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+}
+
 export async function GET(request: NextRequest) {
   const supabase = await createClientServer();
   const admin = createAdminClient();
@@ -143,17 +147,61 @@ export async function POST(request: NextRequest) {
         await admin.from('order_items').insert(itemRows);
       }
 
-      // 3. Upsert customer profile
-      if (uid) {
-        await admin.from('profiles').upsert({
-          user_id: uid,
-          name: customer.name,
-          email: customer.email || null,
-          phone: customer.phone,
-          city: customer.city,
-          address: customer.address,
-          last_order_at: createdAt,
-        });
+      // 3. Upsert customer profile by email
+      const customerEmail = (customer.email || '').trim().toLowerCase();
+      if (customerEmail) {
+        let profileUserId: string | null = uid && isUuid(uid) ? uid : null;
+
+        // Lookup existing profile by email
+        if (!profileUserId) {
+          const { data: existingProfile } = await admin
+            .from('profiles')
+            .select('user_id')
+            .ilike('email', customerEmail)
+            .maybeSingle();
+
+          if (existingProfile?.user_id) {
+            profileUserId = existingProfile.user_id;
+          }
+        }
+
+        // If no user_id, check auth.users or create user
+        if (!profileUserId) {
+          try {
+            const { data: usersData } = await admin.auth.admin.listUsers({ page: 1, perPage: 100 });
+            const matched = (usersData?.users || []).find(
+              (u) => (u.email || '').toLowerCase() === customerEmail
+            );
+            if (matched?.id) {
+              profileUserId = matched.id;
+            } else {
+              const { data: newUser } = await admin.auth.admin.createUser({
+                email: customerEmail,
+                email_confirm: true,
+                user_metadata: { name: customer.name, phone: customer.phone },
+              });
+              if (newUser?.user?.id) {
+                profileUserId = newUser.user.id;
+              }
+            }
+          } catch {}
+        }
+
+        if (profileUserId) {
+          await admin.from('profiles').upsert(
+            {
+              user_id: profileUserId,
+              name: customer.name,
+              email: customerEmail,
+              phone: customer.phone || '',
+              city: customer.city || '',
+              address: customer.address || '',
+              last_order_at: createdAt,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'user_id' }
+          );
+        }
       }
     }
 

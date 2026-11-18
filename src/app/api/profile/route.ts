@@ -42,11 +42,12 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Return specific profile: prioritize email lookup
     let query = admin.from('profiles').select('*');
-    if (targetId) {
+    if (email) {
+      query = query.ilike('email', email);
+    } else if (targetId) {
       query = query.eq('user_id', targetId);
-    } else if (email) {
-      query = query.eq('email', email);
     } else {
       return NextResponse.json({ profile: null });
     }
@@ -95,24 +96,14 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 1. Resolve UUID for the profile
-    let resolvedUserId: string | null = userId && isUuid(userId) ? userId : null;
+    // 1. Prioritize lookup of existing profile by email
+    let resolvedUserId: string | null = null;
 
-    // Check current cookie session if no valid userId passed
-    if (!resolvedUserId) {
-      const serverClient = await createClientServer();
-      if (serverClient) {
-        const { data: { user } } = await serverClient.auth.getUser();
-        if (user?.id) resolvedUserId = user.id;
-      }
-    }
-
-    // If still no valid UUID, check if profile exists with this email
-    if (!resolvedUserId && cleanEmail) {
+    if (cleanEmail) {
       const { data: existingProfile } = await admin
         .from('profiles')
         .select('user_id')
-        .eq('email', cleanEmail)
+        .ilike('email', cleanEmail)
         .maybeSingle();
 
       if (existingProfile?.user_id) {
@@ -120,7 +111,20 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // If still no user_id, lookup or create auth user with this email
+    // 2. If not found by email, check passed userId or active server session
+    if (!resolvedUserId) {
+      if (userId && isUuid(userId)) {
+        resolvedUserId = userId;
+      } else {
+        const serverClient = await createClientServer();
+        if (serverClient) {
+          const { data: { user } } = await serverClient.auth.getUser();
+          if (user?.id) resolvedUserId = user.id;
+        }
+      }
+    }
+
+    // 3. If still no valid UUID, lookup or create auth user with this email
     if (!resolvedUserId && cleanEmail) {
       try {
         const { data: usersData } = await admin.auth.admin.listUsers({ page: 1, perPage: 100 });
@@ -152,7 +156,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 2. Upsert into public.profiles table
+    // 4. Upsert into public.profiles table by user_id
     const profileRow = {
       user_id: resolvedUserId,
       name: cleanName,
@@ -165,13 +169,40 @@ export async function POST(request: NextRequest) {
 
     const { data: savedRow, error: upsertErr } = await admin
       .from('profiles')
-      .upsert(profileRow)
+      .upsert(profileRow, { onConflict: 'user_id' })
       .select('*')
       .maybeSingle();
 
     if (upsertErr) {
       console.error('Profile upsert error:', upsertErr);
       return NextResponse.json({ error: upsertErr.message }, { status: 500 });
+    }
+
+    // 5. Sync updated customer details across existing orders for this customer
+    if (cleanEmail) {
+      try {
+        const { data: userOrders } = await admin
+          .from('orders')
+          .select('id, data')
+          .eq('user_id', resolvedUserId);
+
+        for (const ord of userOrders || []) {
+          const ordData = ord.data || {};
+          const currentCust = ordData.customer || {};
+          const updatedCust = {
+            ...currentCust,
+            name: cleanName || currentCust.name,
+            phone: cleanPhone || currentCust.phone,
+            city: cleanCity || currentCust.city,
+            address: cleanAddress || currentCust.address,
+            email: cleanEmail,
+          };
+          await admin
+            .from('orders')
+            .update({ data: { ...ordData, customer: updatedCust } })
+            .eq('id', ord.id);
+        }
+      } catch {}
     }
 
     return NextResponse.json({

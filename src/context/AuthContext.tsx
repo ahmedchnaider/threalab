@@ -16,6 +16,7 @@ interface AuthContextType {
   signup: (data: CustomerProfile) => Promise<{ success: boolean; error?: string; requiresOtp?: boolean }>;
   logout: () => Promise<void>;
   updateProfile: (profile: CustomerProfile) => Promise<void>;
+  getProfileByEmail: (email: string) => Promise<CustomerProfile | null>;
   unlockAdmin: (password: string) => Promise<boolean>;
   lockAdmin: () => void;
 }
@@ -144,7 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           if (!verifyErr && sessionData?.user) {
             setUser({ id: sessionData.user.id, email: sessionData.user.email });
-            await fetchSupabaseProfile(sessionData.user.id);
+            await fetchSupabaseProfile(sessionData.user.id, sessionData.user.email);
             toast('Logged in successfully!');
             return { success: true, requiresOtp: false };
           }
@@ -212,7 +213,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (!error && data?.user) {
         setUser({ id: data.user.id, email: data.user.email });
-        await fetchSupabaseProfile(data.user.id);
+        await fetchSupabaseProfile(data.user.id, data.user.email);
         toast('Verified and logged in!');
         return { success: true };
       }
@@ -337,14 +338,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     toast('You have logged out');
   };
 
-  const updateProfile = async (newProfile: CustomerProfile) => {
-    // 1. Update state and localStorage immediately
-    setProfile(newProfile);
+  const getProfileByEmail = async (email: string): Promise<CustomerProfile | null> => {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    if (!cleanEmail) return null;
+
+    // 1. Check local storage by email
     try {
-      localStorage.setItem('tl_profile', JSON.stringify(newProfile));
-      if (newProfile.email) {
-        const uid = user?.id || 'user-' + newProfile.email.replace(/[^a-z0-9]/gi, '');
-        const updatedUser = { id: uid, email: newProfile.email };
+      const cached = localStorage.getItem(`tl_profile_${cleanEmail}`);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch {}
+
+    // 2. Fetch from backend API by email
+    try {
+      const res = await fetch(`/api/profile?email=${encodeURIComponent(cleanEmail)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.profile) {
+          try {
+            localStorage.setItem(`tl_profile_${cleanEmail}`, JSON.stringify(data.profile));
+          } catch {}
+          return data.profile;
+        }
+      }
+    } catch {}
+
+    return null;
+  };
+
+  const updateProfile = async (newProfile: CustomerProfile) => {
+    const cleanEmail = (newProfile.email || user?.email || '').trim().toLowerCase();
+    const updatedProfile: CustomerProfile = {
+      ...newProfile,
+      name: (newProfile.name || '').trim(),
+      email: cleanEmail,
+      phone: (newProfile.phone || '').trim(),
+      city: (newProfile.city || '').trim(),
+      address: (newProfile.address || '').trim(),
+    };
+
+    // 1. Update state and localStorage immediately (keyed by email)
+    setProfile(updatedProfile);
+    try {
+      localStorage.setItem('tl_profile', JSON.stringify(updatedProfile));
+      if (cleanEmail) {
+        localStorage.setItem(`tl_profile_${cleanEmail}`, JSON.stringify(updatedProfile));
+        const uid = user?.id || 'user-' + cleanEmail.replace(/[^a-z0-9]/gi, '');
+        const updatedUser = { id: uid, email: cleanEmail };
         setUser(updatedUser);
         localStorage.setItem('tl_user', JSON.stringify(updatedUser));
       }
@@ -356,7 +397,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...newProfile,
+          ...updatedProfile,
+          email: cleanEmail,
           userId: user?.id,
         }),
       });
@@ -366,6 +408,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (data?.profile) {
           setProfile(data.profile);
           localStorage.setItem('tl_profile', JSON.stringify(data.profile));
+          if (cleanEmail) {
+            localStorage.setItem(`tl_profile_${cleanEmail}`, JSON.stringify(data.profile));
+          }
         }
       } else {
         throw new Error('API save failed');
@@ -376,11 +421,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           await supabase.from('profiles').upsert({
             user_id: user.id,
-            name: newProfile.name,
-            email: newProfile.email,
-            phone: newProfile.phone,
-            city: newProfile.city,
-            address: newProfile.address,
+            name: updatedProfile.name,
+            email: cleanEmail,
+            phone: updatedProfile.phone,
+            city: updatedProfile.city,
+            address: updatedProfile.address,
             updated_at: new Date().toISOString(),
           });
         } catch {}
@@ -427,6 +472,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signup,
         logout,
         updateProfile,
+        getProfileByEmail,
         unlockAdmin,
         lockAdmin,
       }}

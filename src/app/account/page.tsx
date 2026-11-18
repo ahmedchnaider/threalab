@@ -10,7 +10,7 @@ import { LogOut, Eye, CheckCircle2, XCircle, Clock, Truck, Package, Mail, KeyRou
 import Link from 'next/link';
 
 export default function AccountPage() {
-  const { user, profile, login, verifyOtp, signup, logout, updateProfile, isLoading } = useAuth();
+  const { user, profile, login, verifyOtp, signup, logout, updateProfile, getProfileByEmail, isLoading } = useAuth();
   const { orders, settings, cancelOrder } = useStore();
   const { toast } = useToast();
 
@@ -113,6 +113,38 @@ export default function AccountPage() {
     }
   };
 
+  const handleProfileEmailBlur = async (inputEmail: string) => {
+    const clean = (inputEmail || '').trim().toLowerCase();
+    if (!clean || !clean.includes('@') || !clean.includes('.')) return;
+    try {
+      const saved = await getProfileByEmail(clean);
+      if (saved) {
+        setProfileForm((prev) => ({
+          name: saved.name || prev.name || '',
+          email: clean,
+          phone: saved.phone || prev.phone || '',
+          city: saved.city || prev.city || '',
+          address: saved.address || prev.address || '',
+        }));
+        toast('Loaded saved details for ' + clean);
+      }
+    } catch {}
+  };
+
+  const handleAuthEmailBlur = async (inputEmail: string) => {
+    const clean = (inputEmail || '').trim().toLowerCase();
+    if (!clean || !clean.includes('@') || !clean.includes('.')) return;
+    try {
+      const saved = await getProfileByEmail(clean);
+      if (saved) {
+        if (!name && saved.name) setName(saved.name);
+        if (!phone && saved.phone) setPhone(saved.phone);
+        if (!city && saved.city) setCity(saved.city);
+        if (!address && saved.address) setAddress(saved.address);
+      }
+    } catch {}
+  };
+
   // Filter orders for this customer (by user ID or email)
   const myOrders = orders.filter((o) => {
     if (user && o.uid === user.id) return true;
@@ -201,6 +233,7 @@ export default function AccountPage() {
                     required
                     placeholder="you@example.com"
                     value={email}
+                    onBlur={(e) => handleAuthEmailBlur(e.target.value)}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c]"
                   />
@@ -590,6 +623,7 @@ export default function AccountPage() {
                 type="email"
                 required
                 value={profileForm.email}
+                onBlur={(e) => handleProfileEmailBlur(e.target.value)}
                 onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
                 className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c]"
               />

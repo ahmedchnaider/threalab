@@ -12,7 +12,7 @@ import { Minus, Plus, Trash2, Banknote, CheckCircle2, ArrowRight } from 'lucide-
 export default function CartPage() {
   const { cart, updateQty, removeFromCart, clearCart, cartTotal } = useCart();
   const { settings, placeOrder } = useStore();
-  const { user, profile, updateProfile } = useAuth();
+  const { user, profile, updateProfile, getProfileByEmail } = useAuth();
   const { toast } = useToast();
 
   const [lastOrder, setLastOrder] = useState<Order | null>(null);
@@ -41,6 +41,25 @@ export default function CartPage() {
       }));
     }
   }, [profile, user]);
+
+  const handleEmailBlur = async (inputEmail: string) => {
+    const clean = (inputEmail || '').trim().toLowerCase();
+    if (!clean || !clean.includes('@') || !clean.includes('.')) return;
+
+    try {
+      const saved = await getProfileByEmail(clean);
+      if (saved) {
+        setFormData((prev) => ({
+          ...prev,
+          name: prev.name || saved.name || '',
+          phone: prev.phone || saved.phone || '',
+          city: prev.city || saved.city || '',
+          address: prev.address || saved.address || '',
+        }));
+        toast('Loaded saved details for ' + clean);
+      }
+    } catch {}
+  };
 
   const handleSubmitOrder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -302,6 +321,7 @@ export default function CartPage() {
                   type="email"
                   placeholder="For tracking updates"
                   value={formData.email}
+                  onBlur={(e) => handleEmailBlur(e.target.value)}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="w-full px-3 py-2 bg-white border-[1.5px] border-[#141414] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff4d1c]"
                 />
