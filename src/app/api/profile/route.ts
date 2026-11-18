@@ -186,3 +186,111 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const email = searchParams.get('email')?.trim().toLowerCase();
+    const userId = searchParams.get('userId')?.trim();
+
+    if (!email && !userId) {
+      return NextResponse.json(
+        { error: 'Email or userId is required to delete customer account' },
+        { status: 400 }
+      );
+    }
+
+    const admin = createAdminClient();
+    if (!admin) {
+      return NextResponse.json({ success: true, message: 'Deleted locally' });
+    }
+
+    let resolvedUserId: string | null = userId && isUuid(userId) ? userId : null;
+
+    // 1. If no userId, find profile or user by email
+    if (!resolvedUserId && email) {
+      const { data: profile } = await admin
+        .from('profiles')
+        .select('user_id')
+        .eq('email', email)
+        .maybeSingle();
+
+      if (profile?.user_id) {
+        resolvedUserId = profile.user_id;
+      }
+    }
+
+    // 2. If still not resolved, search in auth.users
+    if (!resolvedUserId && email) {
+      try {
+        const { data: usersData } = await admin.auth.admin.listUsers({ page: 1, perPage: 100 });
+        const matched = (usersData?.users || []).find(
+          (u) => (u.email || '').toLowerCase() === email
+        );
+        if (matched?.id) {
+          resolvedUserId = matched.id;
+        }
+      } catch {}
+    }
+
+    // 3. Delete from public.profiles
+    if (resolvedUserId) {
+      await admin.from('profiles').delete().eq('user_id', resolvedUserId);
+    }
+    if (email) {
+      await admin.from('profiles').delete().eq('email', email);
+    }
+
+    // 4. Delete customer orders & order items
+    if (resolvedUserId) {
+      // Clean storage files for orders
+      try {
+        const { data: userOrders } = await admin.from('orders').select('id').eq('user_id', resolvedUserId);
+        for (const o of userOrders || []) {
+          const prefix = `${resolvedUserId}/${o.id}`;
+          const { data: files } = await admin.storage.from('orders').list(prefix);
+          if (files?.length) {
+            await admin.storage.from('orders').remove(files.map((f) => `${prefix}/${f.name}`));
+          }
+        }
+      } catch {}
+
+      await admin.from('order_items').delete().eq('user_id', resolvedUserId);
+      await admin.from('orders').delete().eq('user_id', resolvedUserId);
+    }
+
+    if (email) {
+      // Also delete any guest orders matched by customer email
+      const { data: emailOrders } = await admin.from('orders').select('*');
+      const matchedOrders = (emailOrders || []).filter(
+        (o: any) => (o.data?.customer?.email || '').toLowerCase() === email
+      );
+      for (const o of matchedOrders) {
+        await admin.from('order_items').delete().eq('order_id', o.id);
+        await admin.from('orders').delete().eq('id', o.id);
+      }
+    }
+
+    // 5. Delete auth user from auth.users
+    if (resolvedUserId) {
+      try {
+        await admin.auth.admin.deleteUser(resolvedUserId);
+      } catch (err: any) {
+        console.warn('Could not delete from auth.users:', err?.message);
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Customer account and associated data successfully deleted.',
+      deletedUserId: resolvedUserId,
+      deletedEmail: email,
+    });
+  } catch (error: any) {
+    console.error('Delete customer error:', error);
+    return NextResponse.json(
+      { error: error.message || 'Failed to delete customer account' },
+      { status: 500 }
+    );
+  }
+}

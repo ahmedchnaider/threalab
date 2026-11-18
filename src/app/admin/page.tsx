@@ -35,7 +35,17 @@ export default function AdminPage() {
     return <AdminLock />;
   }
 
-  const handleDeleteCustomerOrders = async (email: string) => {
+  const handleDeleteCustomerAccount = async (email: string) => {
+    // 1. Delete customer account & profile from backend
+    try {
+      await fetch(`/api/profile?email=${encodeURIComponent(email)}`, {
+        method: 'DELETE',
+      });
+    } catch (err) {
+      console.error('Failed to delete customer account:', err);
+    }
+
+    // 2. Delete customer's orders from local state
     const customerOrders = orders.filter(
       (o) => (o.customer.email || '').toLowerCase() === email.toLowerCase()
     );
@@ -127,7 +137,7 @@ export default function AdminPage() {
           <CustomersManager
             orders={orders}
             currency={settings.currency}
-            onDeleteCustomerOrders={handleDeleteCustomerOrders}
+            onDeleteCustomer={handleDeleteCustomerAccount}
           />
         )}
 

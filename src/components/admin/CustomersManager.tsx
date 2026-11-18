@@ -20,26 +20,57 @@ interface CustomerStat {
 interface CustomersManagerProps {
   orders: Order[];
   currency: string;
-  onDeleteCustomerOrders: (email: string) => Promise<void>;
+  onDeleteCustomer?: (email: string) => Promise<void>;
+  onDeleteCustomerOrders?: (email: string) => Promise<void>;
 }
 
-export function CustomersManager({ orders, currency, onDeleteCustomerOrders }: CustomersManagerProps) {
+export function CustomersManager({
+  orders,
+  currency,
+  onDeleteCustomer,
+  onDeleteCustomerOrders,
+}: CustomersManagerProps) {
   const [search, setSearch] = useState('');
   const [confirmDeleteEmail, setConfirmDeleteEmail] = useState<string | null>(null);
+  const [isDeletingEmail, setIsDeletingEmail] = useState<string | null>(null);
   const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
   const [dbProfiles, setDbProfiles] = useState<any[]>([]);
   const { toast } = useToast();
 
-  React.useEffect(() => {
+  const loadProfiles = () => {
     fetch('/api/profile?all=true')
       .then((r) => r.json())
       .then((data) => {
-        if (data?.profiles?.length) {
+        if (data?.profiles) {
           setDbProfiles(data.profiles);
         }
       })
       .catch(() => {});
+  };
+
+  React.useEffect(() => {
+    loadProfiles();
   }, []);
+
+  const handleDelete = async (email: string) => {
+    setIsDeletingEmail(email);
+    try {
+      if (onDeleteCustomer) {
+        await onDeleteCustomer(email);
+      } else if (onDeleteCustomerOrders) {
+        await onDeleteCustomerOrders(email);
+      }
+      setDbProfiles((prev) =>
+        prev.filter((p) => (p.email || '').toLowerCase() !== email.toLowerCase())
+      );
+      setConfirmDeleteEmail(null);
+      toast('Customer account and data deleted');
+    } catch {
+      toast('Failed to delete customer account');
+    } finally {
+      setIsDeletingEmail(null);
+    }
+  };
 
   // Aggregate customers from orders and registered profiles
   const customersMap = new Map<string, CustomerStat>();
@@ -204,14 +235,13 @@ export function CustomersManager({ orders, currency, onDeleteCustomerOrders }: C
                   </button>
 
                   <button
+                    disabled={isDeletingEmail === c.email}
                     onClick={() => {
                       if (confirmDeleteEmail === c.email) {
-                        onDeleteCustomerOrders(c.email);
-                        setConfirmDeleteEmail(null);
-                        toast('Customer records deleted');
+                        handleDelete(c.email);
                       } else {
                         setConfirmDeleteEmail(c.email);
-                        setTimeout(() => setConfirmDeleteEmail(null), 3500);
+                        setTimeout(() => setConfirmDeleteEmail(null), 4000);
                       }
                     }}
                     className={`px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 transition-colors ${
@@ -219,9 +249,16 @@ export function CustomersManager({ orders, currency, onDeleteCustomerOrders }: C
                         ? 'bg-[#b3261e] text-white border-[#b3261e]'
                         : 'border-[#b3261e] text-[#b3261e] hover:bg-[#b3261e] hover:text-white'
                     }`}
+                    title="Delete customer account"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
-                    <span>{confirmDeleteEmail === c.email ? 'Confirm delete?' : 'Delete'}</span>
+                    <span>
+                      {isDeletingEmail === c.email
+                        ? 'Deleting…'
+                        : confirmDeleteEmail === c.email
+                        ? 'Confirm delete account?'
+                        : 'Delete Account'}
+                    </span>
                   </button>
                 </div>
 
