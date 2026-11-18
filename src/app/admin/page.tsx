@@ -27,8 +27,6 @@ export default function AdminPage() {
     saveSettings,
     updateOrderStatus,
     deleteOrder,
-    deleteOrders,
-    deleteCustomerOrders,
   } = useStore();
 
   const [activeTab, setActiveTab] = useState<AdminTab>('products');
@@ -37,64 +35,26 @@ export default function AdminPage() {
     return <AdminLock />;
   }
 
-  const handleDeleteCustomerAccount = async (
-    email: string,
-    orderIds?: string[],
-    phone?: string
-  ) => {
+  const handleDeleteCustomerAccount = async (email: string) => {
     const cleanEmail = (email || '').trim().toLowerCase();
-    const cleanPhone = (phone || '').trim();
 
-    // 1. Gather all order IDs associated with this customer
-    const matchedOrderIds = new Set<string>(orderIds || []);
-    orders.forEach((o) => {
-      const oEmail = (o.customer.email || '').trim().toLowerCase();
-      const oPhone = (o.customer.phone || '').trim();
-      if (cleanEmail && oEmail && oEmail === cleanEmail) {
-        matchedOrderIds.add(o.id);
-      }
-      if (cleanPhone && oPhone && oPhone === cleanPhone) {
-        matchedOrderIds.add(o.id);
-      }
-    });
-    const idsToDelete = Array.from(matchedOrderIds);
-
-    // 2. Immediately delete customer's orders from local store state & localStorage cache
-    if (deleteCustomerOrders) {
-      await deleteCustomerOrders(cleanEmail, cleanPhone, idsToDelete);
-    } else if (idsToDelete.length > 0) {
-      await deleteOrders(idsToDelete);
-    }
-
-    // 3. Delete customer account, auth user, and orders from backend
+    // 1. Delete customer account & profile from backend (preserves orders)
     try {
-      const q = new URLSearchParams();
-      if (cleanEmail) q.set('email', cleanEmail);
-      if (cleanPhone) q.set('phone', cleanPhone);
-      if (idsToDelete.length > 0) q.set('orderIds', idsToDelete.join(','));
-
-      await fetch(`/api/profile?${q.toString()}`, {
+      await fetch(`/api/profile?email=${encodeURIComponent(cleanEmail)}`, {
         method: 'DELETE',
       });
     } catch (err) {
       console.error('Failed to delete customer account:', err);
     }
 
-    // 4. Broadcast deletion across all tabs/windows (logs customer out without affecting admin)
+    // 2. Broadcast deletion across all tabs/windows (logs customer out without affecting admin)
     try {
-      if (cleanEmail || cleanPhone || idsToDelete.length > 0) {
+      if (cleanEmail) {
         localStorage.setItem(
           'tl_deleted_account',
-          JSON.stringify({
-            email: cleanEmail,
-            phone: cleanPhone,
-            orderIds: idsToDelete,
-            time: Date.now(),
-          })
+          JSON.stringify({ email: cleanEmail, time: Date.now() })
         );
-        if (cleanEmail) {
-          localStorage.removeItem(`tl_profile_${cleanEmail}`);
-        }
+        localStorage.removeItem(`tl_profile_${cleanEmail}`);
       }
     } catch {}
   };

@@ -17,7 +17,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
   updateProfile: (profile: CustomerProfile) => Promise<void>;
   getProfileByEmail: (email: string) => Promise<CustomerProfile | null>;
-  deleteAccount: (email?: string, orderIds?: string[], phone?: string) => Promise<boolean>;
+  deleteAccount: (email?: string) => Promise<boolean>;
   unlockAdmin: (password: string) => Promise<boolean>;
   lockAdmin: () => void;
 }
@@ -92,13 +92,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           const parsed = JSON.parse(e.newValue);
           const activeEmail = (user?.email || profile?.email || '').trim().toLowerCase();
-          const activePhone = (profile?.phone || '').trim();
           const matchesEmail = activeEmail && parsed?.email && activeEmail === parsed.email.toLowerCase();
-          const matchesPhone = activePhone && parsed?.phone && activePhone === parsed.phone;
 
-          if (matchesEmail || matchesPhone) {
+          if (matchesEmail) {
             logout();
-            toast('Your customer account, orders, and info have been deleted.');
+            toast('Your customer account was deleted.');
           }
         } catch {}
       }
@@ -410,22 +408,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     toast('You have logged out');
   };
 
-  const deleteAccount = async (
-    emailToDelete?: string,
-    orderIds?: string[],
-    phoneToDelete?: string
-  ): Promise<boolean> => {
+  const deleteAccount = async (emailToDelete?: string): Promise<boolean> => {
     const targetEmail = (emailToDelete || user?.email || profile?.email || '').trim().toLowerCase();
-    const targetPhone = (phoneToDelete || profile?.phone || '').trim();
     const uid = user?.id || '';
 
-    // 1. Delete on server API
+    // 1. Delete on server API (deletes profile & auth user; preserves orders)
     try {
       const q = new URLSearchParams();
       if (targetEmail) q.set('email', targetEmail);
       if (uid) q.set('userId', uid);
-      if (targetPhone) q.set('phone', targetPhone);
-      if (orderIds && orderIds.length > 0) q.set('orderIds', orderIds.join(','));
 
       await fetch(`/api/profile?${q.toString()}`, { method: 'DELETE' });
     } catch (err) {
@@ -438,8 +429,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         'tl_deleted_account',
         JSON.stringify({
           email: targetEmail,
-          phone: targetPhone,
-          orderIds: orderIds || [],
           time: Date.now(),
         })
       );
@@ -453,7 +442,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // 3. Log out immediately and reset customer state
     await logout();
-    toast('Your account, info, and orders have been deleted.');
+    toast('Your account has been deleted.');
     return true;
   };
 

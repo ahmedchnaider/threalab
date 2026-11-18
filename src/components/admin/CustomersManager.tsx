@@ -20,7 +20,7 @@ interface CustomerStat {
 interface CustomersManagerProps {
   orders: Order[];
   currency: string;
-  onDeleteCustomer?: (email: string, orderIds?: string[], phone?: string) => Promise<void>;
+  onDeleteCustomer?: (email: string) => Promise<void>;
   onDeleteCustomerOrders?: (email: string) => Promise<void>;
 }
 
@@ -56,12 +56,10 @@ export function CustomersManager({
     const key = (customer.email && customer.email !== 'No email' ? customer.email : customer.phone) || 'anon';
     setIsDeletingId(key);
     try {
-      const orderIds = customer.orders.map((o) => o.id);
       const emailToSend = customer.email && customer.email !== 'No email' ? customer.email : '';
-      const phoneToSend = customer.phone && customer.phone !== 'No phone' ? customer.phone : '';
 
       if (onDeleteCustomer) {
-        await onDeleteCustomer(emailToSend, orderIds, phoneToSend);
+        await onDeleteCustomer(emailToSend);
       } else if (onDeleteCustomerOrders) {
         await onDeleteCustomerOrders(emailToSend);
       }
@@ -70,12 +68,12 @@ export function CustomersManager({
           const pEmail = (p.email || '').trim().toLowerCase();
           const pPhone = (p.phone || '').trim();
           if (emailToSend && pEmail && pEmail === emailToSend.toLowerCase()) return false;
-          if (phoneToSend && pPhone && pPhone === phoneToSend) return false;
+          if (customer.phone && pPhone && pPhone === customer.phone) return false;
           return true;
         })
       );
       setConfirmDeleteId(null);
-      toast('Customer account and all associated orders deleted');
+      toast('Customer account deleted');
     } catch {
       toast('Failed to delete customer account');
     } finally {
@@ -262,7 +260,7 @@ export function CustomersManager({
                         ? 'bg-[#b3261e] text-white border-[#b3261e]'
                         : 'border-[#b3261e] text-[#b3261e] hover:bg-[#b3261e] hover:text-white'
                     }`}
-                    title="Delete customer account and all associated orders"
+                    title="Delete customer account"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     <span>
