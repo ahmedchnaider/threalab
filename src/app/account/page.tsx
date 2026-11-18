@@ -10,7 +10,18 @@ import { LogOut, Eye, CheckCircle2, XCircle, Clock, Truck, Package, Mail, KeyRou
 import Link from 'next/link';
 
 export default function AccountPage() {
-  const { user, profile, login, verifyOtp, signup, logout, updateProfile, getProfileByEmail, isLoading } = useAuth();
+  const {
+    user,
+    profile,
+    login,
+    verifyOtp,
+    signup,
+    logout,
+    updateProfile,
+    getProfileByEmail,
+    deleteAccount,
+    isLoading,
+  } = useAuth();
   const { orders, settings, cancelOrder } = useStore();
   const { toast } = useToast();
 
@@ -46,6 +57,18 @@ export default function AccountPage() {
   const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [confirmDeleteMyAccount, setConfirmDeleteMyAccount] = useState(false);
+  const [isDeletingMyAccount, setIsDeletingMyAccount] = useState(false);
+
+  const handleDeleteMyAccount = async () => {
+    setIsDeletingMyAccount(true);
+    try {
+      await deleteAccount(profileForm.email || user?.email);
+    } finally {
+      setIsDeletingMyAccount(false);
+      setConfirmDeleteMyAccount(false);
+    }
+  };
 
   // Sync profile form when profile loads
   React.useEffect(() => {
@@ -687,6 +710,33 @@ export default function AccountPage() {
                 <span>Save Profile Details</span>
               )}
             </button>
+
+            <div className="pt-4 border-t border-[#ddd6c8] flex justify-between items-center">
+              <span className="text-xs text-[#6b665d]">Account Management:</span>
+              <button
+                type="button"
+                disabled={isDeletingMyAccount}
+                onClick={() => {
+                  if (confirmDeleteMyAccount) {
+                    handleDeleteMyAccount();
+                  } else {
+                    setConfirmDeleteMyAccount(true);
+                    setTimeout(() => setConfirmDeleteMyAccount(false), 4500);
+                  }
+                }}
+                className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
+                  confirmDeleteMyAccount
+                    ? 'bg-[#b3261e] text-white border-[#b3261e]'
+                    : 'border-[#b3261e] text-[#b3261e] hover:bg-[#b3261e] hover:text-white'
+                }`}
+              >
+                {isDeletingMyAccount
+                  ? 'Deleting Account…'
+                  : confirmDeleteMyAccount
+                  ? 'Confirm Delete Account & Log Out?'
+                  : 'Delete My Account'}
+              </button>
+            </div>
           </form>
         </div>
       </div>

@@ -17,6 +17,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
   updateProfile: (profile: CustomerProfile) => Promise<void>;
   getProfileByEmail: (email: string) => Promise<CustomerProfile | null>;
+  deleteAccount: (email?: string) => Promise<boolean>;
   unlockAdmin: (password: string) => Promise<boolean>;
   lockAdmin: () => void;
 }
@@ -75,13 +76,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       });
 
+      // Listen for account deletion broadcasts from admin panel or other tabs
+      const handleStorage = (e: StorageEvent) => {
+        if (e.key === 'tl_deleted_account' && e.newValue) {
+          try {
+            const parsed = JSON.parse(e.newValue);
+            const activeEmail = (user?.email || profile?.email || '').trim().toLowerCase();
+            if (activeEmail && parsed?.email && activeEmail === parsed.email.toLowerCase()) {
+              logout();
+              toast('Your account was deleted.');
+            }
+          } catch {}
+        }
+      };
+      if (typeof window !== 'undefined') {
+        window.addEventListener('storage', handleStorage);
+      }
+
       return () => {
         authListener.subscription.unsubscribe();
+        if (typeof window !== 'undefined') {
+          window.removeEventListener('storage', handleStorage);
+        }
       };
     } else {
       setIsLoading(false);
     }
-  }, []);
+  }, [user?.email, profile?.email]);
 
   const fetchSupabaseProfile = async (uid: string, userEmail?: string) => {
     // 1. Try server endpoint
@@ -99,6 +120,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setIsAdmin(true);
           }
           return;
+        } else if (data?.profile === null && (uid || userEmail)) {
+          // Customer profile was deleted on server! Automatically log them out
+          logout();
+          return;
         }
       }
     } catch {}
@@ -110,6 +135,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (data && !error) {
           setProfile(data);
           localStorage.setItem('tl_profile', JSON.stringify(data));
+        } else if (!data && !error && uid) {
+          logout();
+          return;
         }
         const adminCheck = await supabase.rpc('is_admin');
         if (adminCheck?.data) {
@@ -325,17 +353,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     if (isSupabaseConfigured && supabase) {
-      await supabase.auth.signOut();
+      await supabase.auth.signOut().catch(() => {});
     }
+    const currentEmail = (user?.email || profile?.email || '').trim().toLowerCase();
     setUser(null);
     setProfile(null);
     setAdminUnlocked(false);
     localStorage.removeItem('tl_user');
     localStorage.removeItem('tl_profile');
+    if (currentEmail) {
+      localStorage.removeItem(`tl_profile_${currentEmail}`);
+    }
     try {
       sessionStorage.removeItem('tl_admin');
     } catch {}
     toast('You have logged out');
+  };
+
+  const deleteAccount = async (emailToDelete?: string): Promise<boolean> => {
+    const targetEmail = (emailToDelete || user?.email || profile?.email || '').trim().toLowerCase();
+    if (!targetEmail) return false;
+
+    // 1. Delete on server API
+    try {
+      await fetch(
+        `/api/profile?email=${encodeURIComponent(targetEmail)}&userId=${encodeURIComponent(user?.id || '')}`,
+        { method: 'DELETE' }
+      );
+    } catch {}
+
+    // 2. Broadcast deletion across all browser windows / tabs
+    try {
+      localStorage.setItem(
+        'tl_deleted_account',
+        JSON.stringify({ email: targetEmail, time: Date.now() })
+      );
+      localStorage.removeItem(`tl_profile_${targetEmail}`);
+    } catch {}
+
+    // 3. Log out immediately
+    await logout();
+    toast('Account deleted and logged out.');
+    return true;
   };
 
   const getProfileByEmail = async (email: string): Promise<CustomerProfile | null> => {
@@ -473,6 +532,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
         updateProfile,
         getProfileByEmail,
+        deleteAccount,
         unlockAdmin,
         lockAdmin,
       }}

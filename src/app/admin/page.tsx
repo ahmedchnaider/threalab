@@ -14,7 +14,7 @@ import { Lock } from 'lucide-react';
 type AdminTab = 'products' | 'orders' | 'customers' | 'designs' | 'store';
 
 export default function AdminPage() {
-  const { adminUnlocked, lockAdmin } = useAuth();
+  const { adminUnlocked, lockAdmin, user, profile, logout } = useAuth();
   const {
     products,
     designs,
@@ -36,18 +36,35 @@ export default function AdminPage() {
   }
 
   const handleDeleteCustomerAccount = async (email: string) => {
+    const cleanEmail = (email || '').trim().toLowerCase();
+
     // 1. Delete customer account & profile from backend
     try {
-      await fetch(`/api/profile?email=${encodeURIComponent(email)}`, {
+      await fetch(`/api/profile?email=${encodeURIComponent(cleanEmail)}`, {
         method: 'DELETE',
       });
     } catch (err) {
       console.error('Failed to delete customer account:', err);
     }
 
-    // 2. Delete customer's orders from local state
+    // 2. Broadcast deletion across all tabs/windows
+    try {
+      localStorage.setItem(
+        'tl_deleted_account',
+        JSON.stringify({ email: cleanEmail, time: Date.now() })
+      );
+      localStorage.removeItem(`tl_profile_${cleanEmail}`);
+    } catch {}
+
+    // 3. If the deleted customer is currently logged into this browser session, log them out!
+    const activeEmail = (user?.email || profile?.email || '').trim().toLowerCase();
+    if (activeEmail && activeEmail === cleanEmail) {
+      await logout();
+    }
+
+    // 4. Delete customer's orders from local state
     const customerOrders = orders.filter(
-      (o) => (o.customer.email || '').toLowerCase() === email.toLowerCase()
+      (o) => (o.customer.email || '').toLowerCase() === cleanEmail
     );
     for (const o of customerOrders) {
       await deleteOrder(o.id);
