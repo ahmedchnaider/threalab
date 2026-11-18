@@ -99,6 +99,8 @@ export interface CartItem {
 }
 
 export interface CustomerProfile {
+  user_id?: string;
+  is_admin?: boolean;
   name: string;
   email: string;
   phone: string;

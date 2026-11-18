@@ -335,28 +335,29 @@ export async function DELETE(request: NextRequest) {
       } catch {}
     }
 
-    // 4. Delete from public.profiles
-    if (resolvedUserId) {
-      await admin.from('profiles').delete().eq('user_id', resolvedUserId);
-    }
-    if (email) {
-      await admin.from('profiles').delete().ilike('email', email);
-    }
-    if (phone) {
-      const normPhone = normalizePhone(phone);
+    // 3.5. If still not resolved, check orders table for user_id associated with this email or phone
+    if (!resolvedUserId && (email || phone)) {
       try {
-        const { data: allProfiles } = await admin.from('profiles').select('user_id, phone');
-        const idsToDelete = (allProfiles || [])
-          .filter((p) => normalizePhone(p.phone) === normPhone)
-          .map((p) => p.user_id);
-        for (const uid of idsToDelete) {
-          await admin.from('profiles').delete().eq('user_id', uid);
+        const normTargetPhone = normalizePhone(phone);
+        const { data: allOrders } = await admin.from('orders').select('user_id, data').limit(1000);
+        for (const o of allOrders || []) {
+          const cEmail = (o.data?.customer?.email || '').trim().toLowerCase();
+          const cPhone = normalizePhone(o.data?.customer?.phone);
+          if (o.user_id && isUuid(o.user_id)) {
+            if (email && cEmail === email) {
+              resolvedUserId = o.user_id;
+              break;
+            }
+            if (normTargetPhone && cPhone && normTargetPhone === cPhone) {
+              resolvedUserId = o.user_id;
+              break;
+            }
+          }
         }
       } catch {}
-      await admin.from('profiles').delete().eq('phone', phone);
     }
 
-    // 5. Purge customer orders, order items, and storage mockups
+    // 4. Purge customer orders, order items, and storage mockups FIRST before deleting profile
     const purgedOrderIds = new Set<string>();
     const purgeOrder = async (orderId: string, orderUserId?: string | null) => {
       if (purgedOrderIds.has(orderId)) return;
@@ -418,6 +419,27 @@ export async function DELETE(request: NextRequest) {
       } catch {}
     }
 
+    // 5. Delete from public.profiles
+    if (resolvedUserId) {
+      await admin.from('profiles').delete().eq('user_id', resolvedUserId);
+    }
+    if (email) {
+      await admin.from('profiles').delete().ilike('email', email);
+    }
+    if (phone) {
+      const normPhone = normalizePhone(phone);
+      try {
+        const { data: allProfiles } = await admin.from('profiles').select('user_id, phone');
+        const idsToDelete = (allProfiles || [])
+          .filter((p) => normalizePhone(p.phone) === normPhone)
+          .map((p) => p.user_id);
+        for (const uid of idsToDelete) {
+          await admin.from('profiles').delete().eq('user_id', uid);
+        }
+      } catch {}
+      await admin.from('profiles').delete().eq('phone', phone);
+    }
+
     // 6. Delete auth user from auth.users (so customer cannot log back in)
     if (resolvedUserId) {
       try {
@@ -425,6 +447,16 @@ export async function DELETE(request: NextRequest) {
       } catch (err: any) {
         console.warn('Could not delete from auth.users:', err?.message);
       }
+    }
+    if (email) {
+      try {
+        const { data: usersData } = await admin.auth.admin.listUsers({ page: 1, perPage: 100 });
+        for (const u of usersData?.users || []) {
+          if ((u.email || '').toLowerCase() === email) {
+            await admin.auth.admin.deleteUser(u.id);
+          }
+        }
+      } catch {}
     }
 
     return NextResponse.json({

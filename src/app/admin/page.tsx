@@ -136,9 +136,12 @@ export default function AdminPage() {
       // If active customer in this browser session matches the deleted customer, reset customer auth
       const activeEmail = (user?.email || profile?.email || '').trim().toLowerCase();
       const activeNormPhone = normalizePhone(profile?.phone);
+      const activeUid = user?.id || (profile as any)?.user_id;
+
       let matchesSession = Boolean(
         (validEmail && activeEmail === validEmail) ||
-        (cleanNormPhone && activeNormPhone && cleanNormPhone === activeNormPhone)
+        (cleanNormPhone && activeNormPhone && cleanNormPhone === activeNormPhone) ||
+        (customer.userId && activeUid && customer.userId === activeUid)
       );
 
       // Check localStorage cached customer profile as well
@@ -154,6 +157,7 @@ export default function AdminPage() {
           const p = JSON.parse(savedProfileStr);
           if (validEmail && p.email && p.email.toLowerCase() === validEmail) matchesSession = true;
           if (cleanNormPhone && normalizePhone(p.phone) === cleanNormPhone) matchesSession = true;
+          if (customer.userId && p.user_id && p.user_id === customer.userId) matchesSession = true;
         }
       } catch {}
 

@@ -69,7 +69,11 @@ export default function AccountPage() {
       const targetOrderIds = myOrders.map((o) => o.id);
 
       if (targetOrderIds.length > 0) {
-        await deleteOrders(targetOrderIds);
+        await deleteOrders(targetOrderIds, {
+          email: cleanEmail || undefined,
+          phone: cleanPhone || undefined,
+          userId: user?.id,
+        });
       }
 
       await deleteAccount(cleanEmail, targetOrderIds, cleanPhone);
@@ -108,6 +112,56 @@ export default function AccountPage() {
       setProfileForm({ name: '', email: '', phone: '', city: '', address: '' });
     }
   }, [profile, user]);
+
+  // Listen for account deletion broadcasts (when admin deletes this customer account)
+  React.useEffect(() => {
+    const handleAccountDeletion = (data: any) => {
+      if (!data) return;
+      const delEmail = (data.email || '').trim().toLowerCase();
+      const delPhone = normalizePhone(data.phone);
+      const delUid = data.userId;
+
+      const myEmail = (profileForm.email || profile?.email || user?.email || '').trim().toLowerCase();
+      const myPhone = normalizePhone(profileForm.phone || profile?.phone);
+      const myUid = user?.id || (profile as any)?.user_id;
+
+      if (
+        data.clearAll ||
+        (delEmail && myEmail && delEmail === myEmail) ||
+        (delPhone && myPhone && delPhone === myPhone) ||
+        (delUid && myUid && delUid === myUid)
+      ) {
+        setProfileForm({ name: '', email: '', phone: '', city: '', address: '' });
+        setEmail('');
+        setName('');
+        setPhone('');
+        setCity('');
+        setAddress('');
+        logout(false);
+      }
+    };
+
+    const handleCustomEvent = (e: Event) => {
+      handleAccountDeletion((e as CustomEvent).detail);
+    };
+
+    const handleStorageEvent = (e: StorageEvent) => {
+      if (e.key === 'tl_deleted_account' && e.newValue) {
+        try {
+          handleAccountDeletion(JSON.parse(e.newValue));
+        } catch {}
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('tl_deleted_account', handleCustomEvent);
+      window.addEventListener('storage', handleStorageEvent);
+      return () => {
+        window.removeEventListener('tl_deleted_account', handleCustomEvent);
+        window.removeEventListener('storage', handleStorageEvent);
+      };
+    }
+  }, [profileForm, profile, user, logout]);
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -195,17 +249,20 @@ export default function AccountPage() {
   };
 
   // Filter orders for this customer (by user ID, email, or phone)
-  const myOrders = orders.filter((o) => {
-    if (user && o.uid && o.uid === user.id) return true;
-    const currentEmail = (profileForm.email || profile?.email || user?.email || '').trim().toLowerCase();
-    const currentNormPhone = normalizePhone(profileForm.phone || profile?.phone);
-    const oEmail = (o.customer?.email || '').trim().toLowerCase();
-    const oNormPhone = normalizePhone(o.customer?.phone);
+  const myOrders = React.useMemo(() => {
+    if (!user && !profile) return [];
+    return orders.filter((o) => {
+      if (user && o.uid && o.uid === user.id) return true;
+      const currentEmail = (profileForm.email || profile?.email || user?.email || '').trim().toLowerCase();
+      const currentNormPhone = normalizePhone(profileForm.phone || profile?.phone);
+      const oEmail = (o.customer?.email || '').trim().toLowerCase();
+      const oNormPhone = normalizePhone(o.customer?.phone);
 
-    if (currentEmail && oEmail && oEmail === currentEmail) return true;
-    if (currentNormPhone && oNormPhone && currentNormPhone === oNormPhone) return true;
-    return false;
-  });
+      if (currentEmail && oEmail && oEmail === currentEmail) return true;
+      if (currentNormPhone && oNormPhone && currentNormPhone === oNormPhone) return true;
+      return false;
+    });
+  }, [orders, user, profile, profileForm]);
 
   if (isLoading) {
     return (

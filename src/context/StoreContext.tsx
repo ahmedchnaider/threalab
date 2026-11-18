@@ -59,6 +59,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
 
     // 2. Fetch from backend API routes
+    const isAdminUnlocked = typeof window !== 'undefined' && sessionStorage.getItem('tl_admin') === 'true';
     Promise.all([
       fetch('/api/products')
         .then((r) => r.json())
@@ -69,7 +70,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       fetch('/api/settings')
         .then((r) => r.json())
         .catch(() => null),
-      fetch('/api/orders')
+      fetch(isAdminUnlocked ? '/api/orders?all=true' : '/api/orders', {
+        headers: isAdminUnlocked ? { 'x-admin-unlocked': 'true' } : {},
+      })
         .then((r) => r.json())
         .catch(() => null),
     ])

@@ -88,6 +88,7 @@ export function CustomersManager({
         })
       );
       setConfirmDeleteId(null);
+      loadProfiles();
       toast('Customer account and orders deleted');
     } catch {
       toast('Failed to delete customer account');
@@ -171,6 +172,10 @@ export function CustomersManager({
       existing.totalSpent += orderTotal;
       if (o.createdAt > existing.lastOrderAt) {
         existing.lastOrderAt = o.createdAt;
+      }
+      if (!existing.userId && o.uid) existing.userId = o.uid;
+      if ((!existing.email || existing.email === 'No email') && oEmail && oEmail !== 'no email') {
+        existing.email = o.customer?.email || existing.email;
       }
       if (o.customer?.name && existing.name === 'Anonymous') existing.name = o.customer.name;
       if (o.customer?.phone && existing.phone === 'No phone') existing.phone = o.customer.phone;

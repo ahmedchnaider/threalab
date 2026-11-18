@@ -73,10 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {}
 
     // Listen for account deletion broadcasts across all tabs/windows and in current window
-    const handleDeletedAccount = (data: { email?: string; phone?: string; orderIds?: string[]; clearAll?: boolean }) => {
-      // Never log out the store administrator
-      if (adminUnlockedRef.current) return;
-
+    const handleDeletedAccount = (data: { email?: string; phone?: string; userId?: string; orderIds?: string[]; clearAll?: boolean }) => {
       if (data?.clearAll) {
         logout('All customer and order data was cleared.');
         return;
@@ -84,13 +81,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const activeEmail = (userRef.current?.email || profileRef.current?.email || '').trim().toLowerCase();
       const activeNormPhone = normalizePhone(profileRef.current?.phone);
+      const activeUid = userRef.current?.id || profileRef.current?.user_id;
+
       const delEmail = (data?.email || '').trim().toLowerCase();
       const delNormPhone = normalizePhone(data?.phone);
+      const delUid = data?.userId;
 
       const matchesEmail = Boolean(delEmail && activeEmail && activeEmail === delEmail);
       const matchesPhone = Boolean(delNormPhone && activeNormPhone && activeNormPhone === delNormPhone);
+      const matchesUid = Boolean(delUid && activeUid && activeUid === delUid);
 
-      if (matchesEmail || matchesPhone) {
+      if (matchesEmail || matchesPhone || matchesUid) {
         logout('Your customer account was deleted and you have been logged out.');
       }
     };
@@ -124,9 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           try {
             const { data: userData, error: userError } = await client.auth.getUser();
             if (userError || !userData?.user) {
-              if (!adminUnlockedRef.current) {
-                await logout('Your customer account was deleted.');
-              }
+              await logout('Your customer account was deleted.');
               setIsLoading(false);
               return;
             }
@@ -136,14 +135,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await fetchSupabaseProfile(session.user.id, session.user.email);
         } else {
           // No active Supabase session
-          if (!adminUnlockedRef.current) {
-            setUser(null);
-            setProfile(null);
-            try {
-              localStorage.removeItem('tl_user');
-              localStorage.removeItem('tl_profile');
-            } catch {}
-          }
+          setUser(null);
+          setProfile(null);
+          try {
+            localStorage.removeItem('tl_user');
+            localStorage.removeItem('tl_profile');
+          } catch {}
         }
         setIsLoading(false);
       });
@@ -153,14 +150,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser({ id: session.user.id, email: session.user.email });
           await fetchSupabaseProfile(session.user.id, session.user.email);
         } else {
-          if (!adminUnlockedRef.current) {
-            setUser(null);
-            setProfile(null);
-            try {
-              localStorage.removeItem('tl_user');
-              localStorage.removeItem('tl_profile');
-            } catch {}
-          }
+          setUser(null);
+          setProfile(null);
+          try {
+            localStorage.removeItem('tl_user');
+            localStorage.removeItem('tl_profile');
+          } catch {}
         }
       });
       authListener = data;
@@ -196,11 +191,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           return;
         } else if (data?.profile === null) {
-          // Profile was deleted on server - log out immediately
-          if (!adminUnlockedRef.current) {
-            await logout('Your customer account was deleted.');
-            return;
-          }
+          // Profile was deleted on server - log out customer session immediately
+          await logout('Your customer account was deleted.');
+          return;
         }
       }
     } catch {}
@@ -431,6 +424,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     const currentEmail = (userRef.current?.email || profileRef.current?.email || '').trim().toLowerCase();
     const currentNormPhone = normalizePhone(profileRef.current?.phone);
+    const currentUid = userRef.current?.id || (profileRef.current as any)?.user_id;
     setUser(null);
     setProfile(null);
     try {
@@ -447,6 +441,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const parsedOrders = JSON.parse(rawOrders);
         if (Array.isArray(parsedOrders)) {
           const filteredOrders = parsedOrders.filter((o: any) => {
+            if (currentUid && o.uid && o.uid === currentUid) return false;
             const oEmail = (o.customer?.email || '').trim().toLowerCase();
             const oPhone = normalizePhone(o.customer?.phone);
             if (currentEmail && oEmail && oEmail === currentEmail) return false;
