@@ -44,6 +44,7 @@ export function CollectionsManager({
   const [formCoverImage, setFormCoverImage] = useState<string>('');
 
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
@@ -88,18 +89,49 @@ export function CollectionsManager({
       const file = files[i];
       if (!file.type.startsWith('image/')) continue;
 
+      setUploadStatus(`Uploading ${i + 1}/${files.length}...`);
+
+      let finalUrl = '';
+
+      // 1. Try streaming directly to Supabase storage via /api/upload
       try {
-        const shrunk = await shrinkImage(file, 1600);
-        const item: CollectionImage = {
-          id: newId(),
-          url: shrunk,
-          caption: file.name.replace(/\.[^.]+$/, ''),
-          order: formImages.length + newItems.length,
-        };
-        newItems.push(item);
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('bucket', 'media');
+        formData.append('folder', 'collections');
+
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.url) {
+            finalUrl = data.url;
+          }
+        }
       } catch (err) {
-        toast(`Could not process ${file.name}`);
+        console.warn('Direct upload failed, falling back to local compression', err);
       }
+
+      // 2. Fallback to compact compressed JPEG if direct upload failed
+      if (!finalUrl) {
+        try {
+          finalUrl = await shrinkImage(file, 1000, 'jpeg');
+        } catch (err) {
+          toast(`Could not process ${file.name}`);
+          continue;
+        }
+      }
+
+      const item: CollectionImage = {
+        id: newId(),
+        url: finalUrl,
+        caption: file.name.replace(/\.[^.]+$/, ''),
+        order: formImages.length + newItems.length,
+      };
+      newItems.push(item);
     }
 
     if (newItems.length > 0) {
@@ -111,8 +143,8 @@ export function CollectionsManager({
       toast(`${newItems.length} image${newItems.length > 1 ? 's' : ''} added`);
     }
 
+    setUploadStatus('');
     setIsUploading(false);
-    // Reset file input value
     e.target.value = '';
   };
 
@@ -164,8 +196,9 @@ export function CollectionsManager({
       await onSave(collectionToSave);
       toast(editingCollection ? 'Collection updated' : 'Collection created');
       cancelEdit();
-    } catch (err) {
-      toast('Failed to save collection');
+    } catch (err: any) {
+      console.error('Failed to save collection:', err);
+      toast(err?.message || 'Failed to save collection');
     } finally {
       setIsSaving(false);
     }
@@ -302,7 +335,7 @@ export function CollectionsManager({
 
               <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#141414] text-[#f4f1ea] text-xs font-bold hover:bg-[#ff4d1c] transition-colors">
                 <Upload className="w-3.5 h-3.5" />
-                <span>{isUploading ? 'Compressing...' : 'Add Images'}</span>
+                <span>{isUploading ? (uploadStatus || 'Uploading...') : 'Add Images'}</span>
                 <input
                   type="file"
                   multiple

@@ -100,11 +100,16 @@ export async function POST(request: NextRequest) {
         currentCollections.unshift(cleanCollection);
       }
 
-      await admin.from('settings').upsert({
+      const { error: upsertErr } = await admin.from('settings').upsert({
         id: 2,
         data: { collections: currentCollections },
         updated_at: new Date().toISOString(),
       });
+
+      if (upsertErr) {
+        console.error('Settings table upsert error:', upsertErr);
+        throw new Error(upsertErr.message || 'Database update failed');
+      }
     }
 
     return NextResponse.json({ success: true, collection: cleanCollection });

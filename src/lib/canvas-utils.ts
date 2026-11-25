@@ -177,7 +177,11 @@ export function readAsDataURL(file: File): Promise<string> {
   });
 }
 
-export async function shrinkImage(file: File, maxDim = 900): Promise<string> {
+export async function shrinkImage(
+  file: File,
+  maxDim = 900,
+  format: 'auto' | 'jpeg' | 'png' = 'auto'
+): Promise<string> {
   const data = await readAsDataURL(file);
   const img = await loadImg(data);
   const sc = Math.min(1, maxDim / Math.max(img.width, img.height));
@@ -187,5 +191,15 @@ export async function shrinkImage(file: File, maxDim = 900): Promise<string> {
   const ctx = c.getContext('2d');
   if (!ctx) throw new Error('Canvas context failed');
   ctx.drawImage(img, 0, 0, c.width, c.height);
+
+  const useJpeg =
+    format === 'jpeg' ||
+    (format === 'auto' &&
+      !file.type.includes('png') &&
+      !file.type.includes('svg'));
+
+  if (useJpeg) {
+    return c.toDataURL('image/jpeg', 0.82);
+  }
   return c.toDataURL('image/png');
 }

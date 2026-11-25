@@ -287,7 +287,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       : collections.map((x) => (x.id === c.id ? c : x));
 
     setCollections(updated);
-    localStorage.setItem('tl_collections', JSON.stringify(updated));
+    try {
+      localStorage.setItem('tl_collections', JSON.stringify(updated));
+    } catch (e) {
+      console.warn('localStorage quota reached, unable to cache all collections locally', e);
+    }
 
     try {
       const res = await fetch('/api/collections', {
@@ -295,6 +299,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(c),
       });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData?.error || `Server error (${res.status})`);
+      }
+
       const data = await res.json();
       if (data?.collection) {
         setCollections((prev) => {
@@ -302,14 +312,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (!synced.some((x) => x.id === data.collection.id)) {
             synced.unshift(data.collection);
           }
-          localStorage.setItem('tl_collections', JSON.stringify(synced));
+          try {
+            localStorage.setItem('tl_collections', JSON.stringify(synced));
+          } catch {}
           return synced;
         });
       }
-    } catch {
-      // Offline fallback
+    } catch (err) {
+      console.error('Error saving collection to backend:', err);
+      throw err;
     }
-    toast(isNew ? 'Collection created' : 'Collection updated');
   };
 
   const deleteCollection = async (id: string) => {
