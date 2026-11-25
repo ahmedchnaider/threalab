@@ -79,6 +79,7 @@ export async function POST(request: NextRequest) {
       name,
       description: (collectionData.description || '').trim(),
       coverImage: coverImage || '',
+      price: typeof collectionData.price === 'number' && !isNaN(collectionData.price) ? collectionData.price : 45,
       images: processedImages,
       active: collectionData.active !== undefined ? Boolean(collectionData.active) : true,
       order: typeof collectionData.order === 'number' ? collectionData.order : 0,

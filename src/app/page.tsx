@@ -165,7 +165,7 @@ export default function ShopPage() {
             {activeCollections.map((col) => {
               const frontImage = col.coverImage || col.images?.[0]?.url || '';
               const prices = col.images.map((img) => img.price).filter((p): p is number => typeof p === 'number' && p > 0);
-              const minPrice = prices.length > 0 ? Math.min(...prices) : 45;
+              const minPrice = prices.length > 0 ? Math.min(...prices) : (col.price || 45);
 
               return (
                 <div

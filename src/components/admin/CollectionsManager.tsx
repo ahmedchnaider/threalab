@@ -43,6 +43,7 @@ export function CollectionsManager({
   const [formName, setFormName] = useState('');
   const [formDescription, setFormDescription] = useState('');
   const [formActive, setFormActive] = useState(true);
+  const [formPrice, setFormPrice] = useState<number | ''>(55);
   const [formImages, setFormImages] = useState<CollectionImage[]>([]);
   const [formCoverImage, setFormCoverImage] = useState<string>('');
 
@@ -57,6 +58,7 @@ export function CollectionsManager({
     setFormName('');
     setFormDescription('');
     setFormActive(true);
+    setFormPrice(55);
     setFormImages([]);
     setFormCoverImage('');
   };
@@ -67,11 +69,13 @@ export function CollectionsManager({
     setFormName(c.name);
     setFormDescription(c.description || '');
     setFormActive(c.active);
+    const initialPrice = typeof c.price === 'number' ? c.price : (c.images?.[0]?.price || 55);
+    setFormPrice(initialPrice);
     setFormImages(
       (c.images || []).map((img, i) => ({
         ...img,
         title: img.title || img.caption || `Piece #${i + 1}`,
-        price: typeof img.price === 'number' && !isNaN(img.price) ? img.price : 45,
+        price: typeof img.price === 'number' && !isNaN(img.price) ? img.price : initialPrice,
         garmentType: img.garmentType || 'tshirt',
         sizes: img.sizes || ['S', 'M', 'L', 'XL', 'XXL'],
       }))
@@ -84,8 +88,16 @@ export function CollectionsManager({
     setIsCreating(false);
     setFormName('');
     setFormDescription('');
+    setFormPrice(55);
     setFormImages([]);
     setFormCoverImage('');
+  };
+
+  const handleCollectionPriceChange = (val: number | '') => {
+    setFormPrice(val);
+    if (typeof val === 'number' && val >= 0) {
+      setFormImages((prev) => prev.map((img) => ({ ...img, price: val })));
+    }
   };
 
   // Process uploaded files and add to current collection images
@@ -136,12 +148,13 @@ export function CollectionsManager({
         }
       }
 
+      const defaultItemPrice = typeof formPrice === 'number' && formPrice >= 0 ? formPrice : 55;
       const item: CollectionImage = {
         id: newId(),
         url: finalUrl,
         title: file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' '),
         caption: '',
-        price: 45,
+        price: defaultItemPrice,
         garmentType: 'tshirt',
         sizes: ['S', 'M', 'L', 'XL', 'XXL'],
         order: formImages.length + newItems.length,
@@ -207,9 +220,10 @@ export function CollectionsManager({
 
     setIsSaving(true);
     try {
+      const baseCollectionPrice = typeof formPrice === 'number' && formPrice >= 0 ? formPrice : 55;
       const cleanedImages: CollectionImage[] = formImages.map((img, i) => {
         const rawPrice = Number(img.price);
-        const validPrice = typeof rawPrice === 'number' && !isNaN(rawPrice) && rawPrice >= 0 ? rawPrice : 45;
+        const validPrice = typeof rawPrice === 'number' && !isNaN(rawPrice) && rawPrice >= 0 ? rawPrice : baseCollectionPrice;
         return {
           ...img,
           title: (img.title || img.caption || `Piece #${i + 1}`).trim(),
@@ -225,6 +239,7 @@ export function CollectionsManager({
         name: cleanName,
         description: formDescription.trim(),
         coverImage: formCoverImage || (cleanedImages[0]?.url || ''),
+        price: baseCollectionPrice,
         images: cleanedImages,
         active: formActive,
         order: editingCollection ? editingCollection.order : collections.length,
@@ -316,8 +331,8 @@ export function CollectionsManager({
 
         <form onSubmit={handleSave} className="space-y-6">
           {/* Metadata Section */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+            <div className="md:col-span-5">
               <label className="block text-xs font-bold text-[#141414] uppercase tracking-wider mb-1.5">
                 Collection Name *
               </label>
@@ -331,7 +346,32 @@ export function CollectionsManager({
               />
             </div>
 
-            <div className="flex items-center pt-6">
+            <div className="md:col-span-4">
+              <label className="block text-xs font-bold text-[#ff4d1c] uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                <Tag className="w-3.5 h-3.5" />
+                <span>Price for All Products ({currency}) *</span>
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  required
+                  value={formPrice}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    handleCollectionPriceChange(v === '' ? '' : Math.max(0, parseFloat(v) || 0));
+                  }}
+                  placeholder="e.g. 55"
+                  className="w-full px-3.5 py-2.5 rounded-xl border-2 border-[#ff4d1c] bg-[#fffdf8] text-sm font-bold font-mono text-[#141414] focus:outline-none focus:ring-2 focus:ring-[#ff4d1c]"
+                />
+              </div>
+              <span className="text-[10px] text-[#6b665d] mt-1 block">
+                Automatically sets price for all pieces in this collection
+              </span>
+            </div>
+
+            <div className="md:col-span-3 flex items-center pt-5">
               <label className="flex items-center gap-3 cursor-pointer select-none">
                 <input
                   type="checkbox"
@@ -345,7 +385,7 @@ export function CollectionsManager({
               </label>
             </div>
 
-            <div className="md:col-span-2">
+            <div className="md:col-span-12">
               <label className="block text-xs font-bold text-[#141414] uppercase tracking-wider mb-1.5">
                 Description / Story (optional)
               </label>

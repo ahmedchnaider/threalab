@@ -119,6 +119,7 @@ export const INITIAL_COLLECTIONS: Collection[] = [
     name: 'Season 01 / Street Culture',
     description: 'Heavyweight oversized silhouettes and raw graphic details printed on demand.',
     coverImage: 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=1200&q=80',
+    price: 65,
     images: [
       {
         id: 'img-col-1',

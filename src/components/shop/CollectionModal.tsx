@@ -81,6 +81,8 @@ export function CollectionModal({
   const piecePrice =
     typeof currentImage.price === 'number' && currentImage.price > 0
       ? currentImage.price
+      : typeof collection.price === 'number' && collection.price > 0
+      ? collection.price
       : 55;
   const pieceType = currentImage.garmentType || 'tshirt';
   const pieceColor = currentImage.color || 'Onyx Black';

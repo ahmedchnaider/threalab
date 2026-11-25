@@ -87,6 +87,7 @@ export interface Collection {
   name: string;
   description?: string;
   coverImage?: string;
+  price?: number;
   images: CollectionImage[];
   active: boolean;
   order: number;
