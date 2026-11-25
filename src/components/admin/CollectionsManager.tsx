@@ -128,7 +128,11 @@ export function CollectionsManager({
       const item: CollectionImage = {
         id: newId(),
         url: finalUrl,
-        caption: file.name.replace(/\.[^.]+$/, ''),
+        title: file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' '),
+        caption: '',
+        price: 45,
+        garmentType: 'tshirt',
+        sizes: ['S', 'M', 'L', 'XL', 'XXL'],
         order: formImages.length + newItems.length,
       };
       newItems.push(item);
@@ -169,6 +173,16 @@ export function CollectionsManager({
   const handleUpdateCaption = (imgId: string, caption: string) => {
     setFormImages((prev) =>
       prev.map((img) => (img.id === imgId ? { ...img, caption } : img))
+    );
+  };
+
+  const handleUpdateImageField = (
+    imgId: string,
+    field: 'title' | 'caption' | 'price' | 'garmentType',
+    value: any
+  ) => {
+    setFormImages((prev) =>
+      prev.map((img) => (img.id === imgId ? { ...img, [field]: value } : img))
     );
   };
 
@@ -423,24 +437,61 @@ export function CollectionsManager({
                         </div>
                       </div>
 
-                      {/* Image Details / Caption */}
-                      <div className="p-2 space-y-1">
-                        <input
-                          type="text"
-                          value={img.caption || ''}
-                          placeholder="Caption / label"
-                          onChange={(e) => handleUpdateCaption(img.id, e.target.value)}
-                          className="w-full text-[11px] px-2 py-1 rounded border border-[#ddd6c8] focus:border-[#141414] focus:outline-none"
-                        />
-                        <div className="flex justify-between items-center text-[10px] text-[#6b665d] px-0.5">
-                          <span>#{idx + 1}</span>
+                      {/* Image Details / Product Fields */}
+                      <div className="p-2.5 space-y-2 bg-white text-xs">
+                        <div>
+                          <label className="text-[10px] uppercase font-bold text-[#6b665d] block mb-0.5">
+                            Product Title
+                          </label>
+                          <input
+                            type="text"
+                            value={img.title || img.caption || ''}
+                            placeholder="e.g. Graphic Tee"
+                            onChange={(e) => handleUpdateImageField(img.id, 'title', e.target.value)}
+                            className="w-full text-xs px-2 py-1 rounded border border-[#ddd6c8] focus:border-[#141414] focus:outline-none"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <div>
+                            <label className="text-[10px] uppercase font-bold text-[#6b665d] block mb-0.5">
+                              Price (TND)
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={img.price !== undefined ? img.price : 45}
+                              onChange={(e) => handleUpdateImageField(img.id, 'price', Number(e.target.value) || 0)}
+                              className="w-full text-xs px-2 py-1 rounded border border-[#ddd6c8] focus:border-[#141414] focus:outline-none"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[10px] uppercase font-bold text-[#6b665d] block mb-0.5">
+                              Type
+                            </label>
+                            <select
+                              value={img.garmentType || 'tshirt'}
+                              onChange={(e) => handleUpdateImageField(img.id, 'garmentType', e.target.value)}
+                              className="w-full text-xs px-1.5 py-1 rounded border border-[#ddd6c8] focus:border-[#141414] focus:outline-none bg-white"
+                            >
+                              <option value="tshirt">T-Shirt</option>
+                              <option value="hoodie">Hoodie</option>
+                              <option value="sweatshirt">Sweatshirt</option>
+                              <option value="tote">Tote</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-between items-center text-[10px] text-[#6b665d] pt-1 border-t border-[#f4f1ea]">
+                          <span>Look #{idx + 1}</span>
                           <button
                             type="button"
                             onClick={() => handleDeleteImage(img.id)}
                             className="text-[#8a1c1c] hover:underline flex items-center gap-0.5 font-bold"
                           >
                             <Trash2 className="w-3 h-3" />
-                            <span>Delete</span>
+                            <span>Remove</span>
                           </button>
                         </div>
                       </div>

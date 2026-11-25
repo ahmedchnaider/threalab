@@ -74,6 +74,11 @@ export interface CollectionImage {
   id: string;
   url: string;
   caption?: string;
+  title?: string;
+  price?: number;
+  garmentType?: GarmentType;
+  color?: string;
+  sizes?: string[];
   order?: number;
 }
 

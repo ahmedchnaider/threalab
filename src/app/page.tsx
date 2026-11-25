@@ -4,10 +4,11 @@ import React, { useState } from 'react';
 import { useStore } from '@/context/StoreContext';
 import { ProductCard } from '@/components/shop/ProductCard';
 import { Lightbox } from '@/components/Lightbox';
+import { CollectionModal } from '@/components/shop/CollectionModal';
 import { LightboxItem, Product, Collection } from '@/lib/types';
 import { getProductViewSrc } from '@/lib/garments';
 import Link from 'next/link';
-import { Maximize2, Sparkles, Layers } from 'lucide-react';
+import { Sparkles, Layers, ShoppingBag } from 'lucide-react';
 
 export default function ShopPage() {
   const { products, collections, settings, isLoading } = useStore();
@@ -15,6 +16,11 @@ export default function ShopPage() {
   const [lightboxTitle, setLightboxTitle] = useState('');
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+
+  // Collection modal state
+  const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
+  const [collectionModalOpen, setCollectionModalOpen] = useState(false);
+  const [collectionModalIndex, setCollectionModalIndex] = useState(0);
 
   const activeProducts = products
     .filter((p) => p.active)
@@ -46,17 +52,11 @@ export default function ShopPage() {
     setLightboxOpen(true);
   };
 
-  // Collection photo zoom handler
-  const handleCollectionImageZoom = (collection: Collection, index = 0) => {
-    const items: LightboxItem[] = collection.images.map((img, i) => ({
-      src: img.url,
-      label: img.caption || `${collection.name} - Look #${i + 1}`,
-    }));
-
-    setLightboxItems(items);
-    setLightboxIndex(index);
-    setLightboxTitle(collection.name);
-    setLightboxOpen(true);
+  // Open collection product purchase modal
+  const handleOpenCollection = (collection: Collection, index = 0) => {
+    setSelectedCollection(collection);
+    setCollectionModalIndex(index);
+    setCollectionModalOpen(true);
   };
 
   return (
@@ -164,11 +164,13 @@ export default function ShopPage() {
           >
             {activeCollections.map((col) => {
               const frontImage = col.coverImage || col.images?.[0]?.url || '';
+              const prices = col.images.map((img) => img.price).filter((p): p is number => typeof p === 'number' && p > 0);
+              const minPrice = prices.length > 0 ? Math.min(...prices) : 45;
 
               return (
                 <div
                   key={col.id}
-                  onClick={() => handleCollectionImageZoom(col, 0)}
+                  onClick={() => handleOpenCollection(col, 0)}
                   className="group relative bg-[#fffdf8] border-[1.5px] border-[#141414] rounded-3xl overflow-hidden cursor-pointer shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col"
                 >
                   {/* Single Front Image */}
@@ -192,41 +194,46 @@ export default function ShopPage() {
                       </div>
                     )}
 
-                    {/* Gradient Overlay with Collection Info */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent flex flex-col justify-between p-6 sm:p-8 text-white">
+                    {/* Gradient Overlay with Collection Info & Shop Action */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent flex flex-col justify-between p-6 sm:p-8 text-white">
                       {/* Top Badges */}
                       <div className="flex justify-between items-start">
                         <span className="text-[11px] font-bold font-mono px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-white flex items-center gap-1.5 shadow">
-                          <Layers className="w-3 h-3 text-[#ff4d1c]" />
+                          <Layers className="w-3.5 h-3.5 text-[#ff4d1c]" />
                           <span>
                             {col.images.length}{' '}
-                            {col.images.length === 1 ? 'photo' : 'photos'}
+                            {col.images.length === 1 ? 'piece' : 'pieces'}
                           </span>
                         </span>
 
-                        <span className="w-9 h-9 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white group-hover:bg-[#ff4d1c] group-hover:text-white transition-colors shadow">
-                          <Maximize2 className="w-4 h-4" />
+                        <span className="text-xs font-bold font-mono px-3 py-1 rounded-full bg-[#141414]/80 backdrop-blur-md text-[#f4f1ea] border border-white/20 flex items-center gap-1 shadow">
+                          <span>From {minPrice} {settings.currency}</span>
                         </span>
                       </div>
 
-                      {/* Bottom Title & Description */}
-                      <div className="space-y-2">
+                      {/* Bottom Title, Description & Shop Button */}
+                      <div className="space-y-3">
                         <div className="inline-block">
-                          <span className="text-[10px] uppercase font-bold tracking-widest text-[#ff4d1c] bg-black/40 px-2 py-0.5 rounded">
-                            Collection
+                          <span className="text-[10px] uppercase font-bold tracking-widest text-[#ff4d1c] bg-black/50 px-2 py-0.5 rounded">
+                            Official Collection
                           </span>
                         </div>
                         <h3 className="font-anton text-2xl sm:text-3xl lg:text-4xl uppercase tracking-wide text-[#f4f1ea] drop-shadow-sm">
                           {col.name}
                         </h3>
                         {col.description && (
-                          <p className="text-xs sm:text-sm text-[#f4f1ea]/80 line-clamp-2 max-w-xl leading-relaxed">
+                          <p className="text-xs sm:text-sm text-[#f4f1ea]/85 line-clamp-2 max-w-xl leading-relaxed">
                             {col.description}
                           </p>
                         )}
-                        <div className="pt-2 flex items-center gap-1.5 text-xs font-bold text-white group-hover:text-[#ff4d1c] transition-colors">
-                          <span>View Lookbook</span>
-                          <span className="group-hover:translate-x-1 transition-transform">→</span>
+                        <div className="pt-2">
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#ff4d1c] text-white font-bold text-xs uppercase tracking-wider shadow hover:bg-white hover:text-[#141414] transition-all group-hover:scale-105"
+                          >
+                            <ShoppingBag className="w-3.5 h-3.5" />
+                            <span>Shop Collection Pieces</span>
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -237,6 +244,15 @@ export default function ShopPage() {
           </div>
         </section>
       )}
+
+      {/* Collection Purchase & Lookbook Modal */}
+      <CollectionModal
+        collection={selectedCollection}
+        currency={settings.currency}
+        isOpen={collectionModalOpen}
+        initialIndex={collectionModalIndex}
+        onClose={() => setCollectionModalOpen(false)}
+      />
 
       {/* Fullscreen Lightbox Modal */}
       <Lightbox

@@ -56,7 +56,12 @@ export async function POST(request: NextRequest) {
       processedImages.push({
         id: imgId,
         url,
+        title: img.title || img.caption || '',
         caption: img.caption || '',
+        price: typeof img.price === 'number' ? img.price : 45,
+        garmentType: img.garmentType || 'tshirt',
+        color: img.color || 'Onyx Black',
+        sizes: Array.isArray(img.sizes) && img.sizes.length > 0 ? img.sizes : ['S', 'M', 'L', 'XL', 'XXL'],
         order: img.order !== undefined ? img.order : i,
       });
     }
