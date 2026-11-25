@@ -1,4 +1,4 @@
-import { Design, Product, StoreSettings } from './types';
+import { Collection, Design, Product, StoreSettings } from './types';
 import { defaultArea } from './garments';
 
 export const INITIAL_SETTINGS: StoreSettings = {
@@ -110,6 +110,40 @@ export const INITIAL_DESIGNS: Design[] = [
     image: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect x="10" y="10" width="180" height="180" rx="20" fill="%231f2f52"/><circle cx="100" cy="100" r="60" fill="none" stroke="%23fffdf8" stroke-width="8"/><rect x="75" y="75" width="50" height="50" transform="rotate(45 100 100)" fill="%23ff4d1c"/></svg>',
     active: true,
     createdAt: Date.now() - 10000,
+  },
+];
+
+export const INITIAL_COLLECTIONS: Collection[] = [
+  {
+    id: 'col-drop-1',
+    name: 'Season 01 / Street Culture',
+    description: 'Heavyweight oversized silhouettes and raw graphic details printed on demand.',
+    coverImage: 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=1200&q=80',
+    images: [
+      {
+        id: 'img-col-1',
+        url: 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=1200&q=80',
+        caption: 'Oversized Street Hoodie - Editorial Look',
+      },
+      {
+        id: 'img-col-2',
+        url: 'https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?auto=format&fit=crop&w=1200&q=80',
+        caption: 'Heavy Cotton Graphic Tee in Dark Mode',
+      },
+      {
+        id: 'img-col-3',
+        url: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=1200&q=80',
+        caption: 'Minimalist Studio Raw Aesthetic',
+      },
+      {
+        id: 'img-col-4',
+        url: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=1200&q=80',
+        caption: 'Bold Front & Back Print Details',
+      },
+    ],
+    active: true,
+    order: 0,
+    createdAt: Date.now() - 100000,
   },
 ];
 

@@ -1,13 +1,14 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Design, Order, OrderStatus, Product, StoreSettings } from '@/lib/types';
-import { INITIAL_DESIGNS, INITIAL_PRODUCTS, INITIAL_SETTINGS, newId } from '@/lib/mock-data';
+import { Collection, Design, Order, OrderStatus, Product, StoreSettings } from '@/lib/types';
+import { INITIAL_COLLECTIONS, INITIAL_DESIGNS, INITIAL_PRODUCTS, INITIAL_SETTINGS, newId } from '@/lib/mock-data';
 import { useToast } from './ToastContext';
 
 interface StoreContextType {
   products: Product[];
   designs: Design[];
+  collections: Collection[];
   settings: StoreSettings;
   orders: Order[];
   isLoading: boolean;
@@ -15,6 +16,8 @@ interface StoreContextType {
   deleteProduct: (id: string) => Promise<void>;
   saveDesign: (design: Design) => Promise<void>;
   deleteDesign: (id: string) => Promise<void>;
+  saveCollection: (collection: Collection) => Promise<void>;
+  deleteCollection: (id: string) => Promise<void>;
   saveSettings: (settings: StoreSettings) => Promise<void>;
   placeOrder: (orderData: Omit<Order, 'id' | 'code' | 'createdAt' | 'status'>) => Promise<Order>;
   updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
@@ -37,6 +40,7 @@ function normalizePhone(p?: string | null): string {
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
   const [designs, setDesigns] = useState<Design[]>(INITIAL_DESIGNS);
+  const [collections, setCollections] = useState<Collection[]>(INITIAL_COLLECTIONS);
   const [settings, setSettings] = useState<StoreSettings>(INITIAL_SETTINGS);
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -47,11 +51,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     try {
       const savedProds = localStorage.getItem('tl_products');
       const savedDesigns = localStorage.getItem('tl_designs');
+      const savedCollections = localStorage.getItem('tl_collections');
       const savedSettings = localStorage.getItem('tl_settings');
       const savedOrders = localStorage.getItem('tl_orders');
 
       if (savedProds) setProducts(JSON.parse(savedProds));
       if (savedDesigns) setDesigns(JSON.parse(savedDesigns));
+      if (savedCollections) setCollections(JSON.parse(savedCollections));
       if (savedSettings) setSettings(JSON.parse(savedSettings));
       if (savedOrders) setOrders(JSON.parse(savedOrders));
     } catch {
@@ -67,6 +73,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       fetch('/api/designs')
         .then((r) => r.json())
         .catch(() => null),
+      fetch('/api/collections')
+        .then((r) => r.json())
+        .catch(() => null),
       fetch('/api/settings')
         .then((r) => r.json())
         .catch(() => null),
@@ -76,7 +85,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         .then((r) => r.json())
         .catch(() => null),
     ])
-      .then(([prodRes, desRes, setRes, ordRes]) => {
+      .then(([prodRes, desRes, colRes, setRes, ordRes]) => {
         if (prodRes?.products?.length) {
           setProducts(prodRes.products);
           localStorage.setItem('tl_products', JSON.stringify(prodRes.products));
@@ -84,6 +93,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (desRes?.designs?.length) {
           setDesigns(desRes.designs);
           localStorage.setItem('tl_designs', JSON.stringify(desRes.designs));
+        }
+        if (Array.isArray(colRes?.collections)) {
+          setCollections(colRes.collections);
+          localStorage.setItem('tl_collections', JSON.stringify(colRes.collections));
         }
         if (setRes?.settings) {
           setSettings(setRes.settings);
@@ -100,6 +113,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     // Listen for order deletions and account deletions across all tabs and current window
     const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'tl_collections' && e.newValue) {
+        try {
+          setCollections(JSON.parse(e.newValue));
+        } catch {}
+      }
       if (e.key === 'tl_orders' && e.newValue) {
         try {
           setOrders(JSON.parse(e.newValue));
@@ -262,6 +280,51 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     toast('Design removed');
   };
 
+  const saveCollection = async (c: Collection) => {
+    const isNew = !collections.some((x) => x.id === c.id);
+    const updated = isNew
+      ? [c, ...collections]
+      : collections.map((x) => (x.id === c.id ? c : x));
+
+    setCollections(updated);
+    localStorage.setItem('tl_collections', JSON.stringify(updated));
+
+    try {
+      const res = await fetch('/api/collections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(c),
+      });
+      const data = await res.json();
+      if (data?.collection) {
+        setCollections((prev) => {
+          const synced = prev.map((x) => (x.id === data.collection.id ? data.collection : x));
+          if (!synced.some((x) => x.id === data.collection.id)) {
+            synced.unshift(data.collection);
+          }
+          localStorage.setItem('tl_collections', JSON.stringify(synced));
+          return synced;
+        });
+      }
+    } catch {
+      // Offline fallback
+    }
+    toast(isNew ? 'Collection created' : 'Collection updated');
+  };
+
+  const deleteCollection = async (id: string) => {
+    const updated = collections.filter((c) => c.id !== id);
+    setCollections(updated);
+    localStorage.setItem('tl_collections', JSON.stringify(updated));
+
+    try {
+      await fetch(`/api/collections/${id}`, { method: 'DELETE' });
+    } catch {
+      // Offline fallback
+    }
+    toast('Collection removed');
+  };
+
   const saveSettings = async (s: StoreSettings) => {
     setSettings(s);
     localStorage.setItem('tl_settings', JSON.stringify(s));
@@ -407,6 +470,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       value={{
         products,
         designs,
+        collections,
         settings,
         orders,
         isLoading,
@@ -414,6 +478,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         deleteProduct,
         saveDesign,
         deleteDesign,
+        saveCollection,
+        deleteCollection,
         saveSettings,
         placeOrder,
         updateOrderStatus,

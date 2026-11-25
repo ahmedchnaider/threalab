@@ -8,11 +8,12 @@ import { ProductsManager } from '@/components/admin/ProductsManager';
 import { OrdersManager } from '@/components/admin/OrdersManager';
 import { CustomersManager } from '@/components/admin/CustomersManager';
 import { DesignsManager } from '@/components/admin/DesignsManager';
+import { CollectionsManager } from '@/components/admin/CollectionsManager';
 import { SettingsManager } from '@/components/admin/SettingsManager';
 import { Order } from '@/lib/types';
 import { Lock } from 'lucide-react';
 
-type AdminTab = 'products' | 'orders' | 'customers' | 'designs' | 'store';
+type AdminTab = 'products' | 'collections' | 'orders' | 'customers' | 'designs' | 'store';
 
 function normalizePhone(p?: string | null): string {
   if (!p) return '';
@@ -28,12 +29,15 @@ export default function AdminPage() {
   const {
     products,
     designs,
+    collections,
     orders,
     settings,
     saveProduct,
     deleteProduct,
     saveDesign,
     deleteDesign,
+    saveCollection,
+    deleteCollection,
     saveSettings,
     updateOrderStatus,
     deleteOrder,
@@ -219,6 +223,7 @@ export default function AdminPage() {
 
   const tabs: Array<{ id: AdminTab; label: string; count?: number }> = [
     { id: 'products', label: 'Products', count: products.length },
+    { id: 'collections', label: 'Collections', count: collections.length },
     { id: 'orders', label: 'Orders', count: orders.length },
     { id: 'customers', label: 'Customers' },
     { id: 'designs', label: 'Designs Library', count: designs.length },
@@ -284,6 +289,14 @@ export default function AdminPage() {
             currency={settings.currency}
             onSave={saveProduct}
             onDelete={deleteProduct}
+          />
+        )}
+
+        {activeTab === 'collections' && (
+          <CollectionsManager
+            collections={collections}
+            onSave={saveCollection}
+            onDelete={deleteCollection}
           />
         )}
 

@@ -70,6 +70,24 @@ export interface Design {
   createdAt: number;
 }
 
+export interface CollectionImage {
+  id: string;
+  url: string;
+  caption?: string;
+  order?: number;
+}
+
+export interface Collection {
+  id: string;
+  name: string;
+  description?: string;
+  coverImage?: string;
+  images: CollectionImage[];
+  active: boolean;
+  order: number;
+  createdAt: number;
+}
+
 export interface StoreSettings {
   name: string;
   currency: string;
