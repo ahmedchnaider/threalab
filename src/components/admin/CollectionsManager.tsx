@@ -79,8 +79,8 @@ export function CollectionsManager({
       Array.isArray(c.sizes) && c.sizes.length > 0
         ? c.sizes
         : c.images?.[0]?.sizes && c.images[0].sizes.length > 0
-        ? c.images[0].sizes
-        : DEFAULT_SIZES;
+          ? c.images[0].sizes
+          : DEFAULT_SIZES;
 
     setFormPrice(initialPrice);
     setFormSizes(initialSizes);
@@ -475,11 +475,10 @@ export function CollectionsManager({
                       key={sz}
                       type="button"
                       onClick={() => handleToggleSize(sz)}
-                      className={`min-w-[50px] h-10 px-3 rounded-xl text-xs font-bold font-mono border-2 flex items-center justify-center gap-1.5 transition-all select-none ${
-                        isSelected
-                          ? 'bg-[#141414] text-[#f4f1ea] border-[#141414] shadow-sm ring-2 ring-[#ff4d1c]/40'
-                          : 'bg-white text-[#6b665d] border-[#ddd6c8] hover:border-[#141414] hover:text-[#141414]'
-                      }`}
+                      className={`min-w-[50px] h-10 px-3 rounded-xl text-xs font-bold font-mono border-2 flex items-center justify-center gap-1.5 transition-all select-none ${isSelected
+                        ? 'bg-[#141414] text-[#f4f1ea] border-[#141414] shadow-sm ring-2 ring-[#ff4d1c]/40'
+                        : 'bg-white text-[#6b665d] border-[#ddd6c8] hover:border-[#141414] hover:text-[#141414]'
+                        }`}
                     >
                       {isSelected ? (
                         <Check className="w-3.5 h-3.5 text-[#ff4d1c]" />
@@ -599,7 +598,7 @@ export function CollectionsManager({
               </label>
             ) : (
               /* Image Grid with Delete and Set Cover buttons */
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+              <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
                 {formImages.map((img, idx) => {
                   const isCover =
                     formCoverImage === img.url || (!formCoverImage && idx === 0);
@@ -899,8 +898,8 @@ export function CollectionsManager({
                       Array.isArray(c.sizes) && c.sizes.length > 0
                         ? c.sizes
                         : c.images?.[0]?.sizes && c.images[0].sizes.length > 0
-                        ? c.images[0].sizes
-                        : DEFAULT_SIZES;
+                          ? c.images[0].sizes
+                          : DEFAULT_SIZES;
                     return (
                       <div className="flex items-center gap-2 text-xs text-[#6b665d]">
                         <span className="font-bold text-[#141414]">Sizes:</span>

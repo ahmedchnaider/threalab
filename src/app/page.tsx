@@ -177,7 +177,7 @@ export default function ShopPage() {
                   <div
                     className={`relative w-full overflow-hidden bg-[#ebe6dc] ${
                       activeCollections.length === 1
-                        ? 'aspect-[16/9] sm:aspect-[21/9]'
+                        ? 'aspect-[4/5] sm:aspect-[16/9] lg:aspect-[21/9] min-h-[380px] sm:min-h-0'
                         : 'aspect-[4/5]'
                     }`}
                   >
@@ -195,10 +195,10 @@ export default function ShopPage() {
                     )}
 
                     {/* Gradient Overlay with Collection Info & Shop Action */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent flex flex-col justify-between p-6 sm:p-8 text-white">
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-black/10 flex flex-col justify-between p-4 sm:p-6 lg:p-8 text-white">
                       {/* Top Badges */}
-                      <div className="flex justify-between items-start">
-                        <span className="text-[11px] font-bold font-mono px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-white flex items-center gap-1.5 shadow">
+                      <div className="flex justify-between items-start gap-2">
+                        <span className="text-[10px] sm:text-[11px] font-bold font-mono px-2.5 sm:px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-white flex items-center gap-1.5 shadow">
                           <Layers className="w-3.5 h-3.5 text-[#ff4d1c]" />
                           <span>
                             {col.images.length}{' '}
@@ -206,19 +206,19 @@ export default function ShopPage() {
                           </span>
                         </span>
 
-                        <span className="text-xs font-bold font-mono px-3 py-1 rounded-full bg-[#141414]/80 backdrop-blur-md text-[#f4f1ea] border border-white/20 flex items-center gap-1 shadow">
+                        <span className="text-[11px] sm:text-xs font-bold font-mono px-2.5 sm:px-3 py-1 rounded-full bg-[#141414]/80 backdrop-blur-md text-[#f4f1ea] border border-white/20 flex items-center gap-1 shadow">
                           <span>From {minPrice} {settings.currency}</span>
                         </span>
                       </div>
 
                       {/* Bottom Title, Description & Shop Button */}
-                      <div className="space-y-3">
+                      <div className="space-y-2 sm:space-y-3">
                         <div className="inline-block">
-                          <span className="text-[10px] uppercase font-bold tracking-widest text-[#ff4d1c] bg-black/50 px-2 py-0.5 rounded">
+                          <span className="text-[9px] sm:text-[10px] uppercase font-bold tracking-widest text-[#ff4d1c] bg-black/60 px-2 py-0.5 rounded">
                             Official Collection
                           </span>
                         </div>
-                        <h3 className="font-anton text-2xl sm:text-3xl lg:text-4xl uppercase tracking-wide text-[#f4f1ea] drop-shadow-sm">
+                        <h3 className="font-anton text-xl sm:text-3xl lg:text-4xl uppercase tracking-wide text-[#f4f1ea] drop-shadow-sm leading-tight">
                           {col.name}
                         </h3>
                         {col.description && (
@@ -226,10 +226,10 @@ export default function ShopPage() {
                             {col.description}
                           </p>
                         )}
-                        <div className="pt-2">
+                        <div className="pt-1 sm:pt-2">
                           <button
                             type="button"
-                            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#ff4d1c] text-white font-bold text-xs uppercase tracking-wider shadow hover:bg-white hover:text-[#141414] transition-all group-hover:scale-105"
+                            className="inline-flex items-center gap-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-full bg-[#ff4d1c] text-white font-bold text-xs uppercase tracking-wider shadow hover:bg-white hover:text-[#141414] transition-all group-hover:scale-105 active:scale-95"
                           >
                             <ShoppingBag className="w-3.5 h-3.5" />
                             <span>Shop Collection Pieces</span>
