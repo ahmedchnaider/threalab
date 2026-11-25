@@ -18,16 +18,19 @@ import {
   ImageIcon,
   ArrowLeft,
   Loader2,
+  Tag,
 } from 'lucide-react';
 
 interface CollectionsManagerProps {
   collections: Collection[];
+  currency?: string;
   onSave: (collection: Collection) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }
 
 export function CollectionsManager({
   collections,
+  currency = 'TND',
   onSave,
   onDelete,
 }: CollectionsManagerProps) {
@@ -64,7 +67,15 @@ export function CollectionsManager({
     setFormName(c.name);
     setFormDescription(c.description || '');
     setFormActive(c.active);
-    setFormImages(c.images || []);
+    setFormImages(
+      (c.images || []).map((img, i) => ({
+        ...img,
+        title: img.title || img.caption || `Piece #${i + 1}`,
+        price: typeof img.price === 'number' && !isNaN(img.price) ? img.price : 45,
+        garmentType: img.garmentType || 'tshirt',
+        sizes: img.sizes || ['S', 'M', 'L', 'XL', 'XXL'],
+      }))
+    );
     setFormCoverImage(c.coverImage || (c.images?.[0]?.url || ''));
   };
 
@@ -196,12 +207,25 @@ export function CollectionsManager({
 
     setIsSaving(true);
     try {
+      const cleanedImages: CollectionImage[] = formImages.map((img, i) => {
+        const rawPrice = Number(img.price);
+        const validPrice = typeof rawPrice === 'number' && !isNaN(rawPrice) && rawPrice >= 0 ? rawPrice : 45;
+        return {
+          ...img,
+          title: (img.title || img.caption || `Piece #${i + 1}`).trim(),
+          price: validPrice,
+          garmentType: img.garmentType || 'tshirt',
+          sizes: img.sizes && img.sizes.length > 0 ? img.sizes : ['S', 'M', 'L', 'XL', 'XXL'],
+          order: i,
+        };
+      });
+
       const collectionToSave: Collection = {
         id: editingCollection ? editingCollection.id : newId(),
         name: cleanName,
         description: formDescription.trim(),
-        coverImage: formCoverImage || (formImages[0]?.url || ''),
-        images: formImages,
+        coverImage: formCoverImage || (cleanedImages[0]?.url || ''),
+        images: cleanedImages,
         active: formActive,
         order: editingCollection ? editingCollection.order : collections.length,
         createdAt: editingCollection ? editingCollection.createdAt : Date.now(),
@@ -361,6 +385,43 @@ export function CollectionsManager({
               </label>
             </div>
 
+            {/* Quick Bulk Price Setter */}
+            {formImages.length > 0 && (
+              <div className="bg-[#ebe6dc]/60 border border-[#ddd6c8] rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2">
+                  <Tag className="w-4 h-4 text-[#ff4d1c]" />
+                  <span className="font-bold text-[#141414]">Bulk Price Tool:</span>
+                  <span className="text-[#6b665d]">Set the same price for all {formImages.length} pieces</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 55"
+                    id="bulk-price-input"
+                    className="w-24 px-2.5 py-1.5 rounded-lg border border-[#141414] bg-white text-xs font-bold font-mono focus:outline-none"
+                  />
+                  <span className="font-bold text-[#141414]">{currency}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const input = document.getElementById('bulk-price-input') as HTMLInputElement;
+                      const val = Number(input?.value);
+                      if (!val || val <= 0) {
+                        alert('Enter a valid price');
+                        return;
+                      }
+                      setFormImages((prev) => prev.map((img) => ({ ...img, price: val })));
+                      toast(`Updated all pieces to ${val} ${currency}`);
+                    }}
+                    className="px-3.5 py-1.5 rounded-lg bg-[#141414] text-white hover:bg-[#ff4d1c] font-bold text-xs transition-colors"
+                  >
+                    Apply to All
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Upload Zone / Drop Area if empty */}
             {formImages.length === 0 ? (
               <label className="border-2 border-dashed border-[#141414] rounded-2xl p-10 flex flex-col items-center justify-center cursor-pointer hover:bg-black/5 transition-colors text-center">
@@ -452,17 +513,26 @@ export function CollectionsManager({
                           />
                         </div>
 
-                        <div className="grid grid-cols-2 gap-1.5">
+                        <div className="grid grid-cols-2 gap-2">
                           <div>
-                            <label className="text-[10px] uppercase font-bold text-[#6b665d] block mb-0.5">
-                              Price (TND)
+                            <label className="text-[10px] uppercase font-bold text-[#ff4d1c] block mb-0.5">
+                              Price ({currency}) *
                             </label>
                             <input
                               type="number"
                               min="0"
-                              value={img.price !== undefined ? img.price : 45}
-                              onChange={(e) => handleUpdateImageField(img.id, 'price', Number(e.target.value) || 0)}
-                              className="w-full text-xs px-2 py-1 rounded border border-[#ddd6c8] focus:border-[#141414] focus:outline-none"
+                              step="any"
+                              value={img.price !== undefined ? img.price : ''}
+                              placeholder="45"
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                handleUpdateImageField(
+                                  img.id,
+                                  'price',
+                                  v === '' ? '' : Math.max(0, parseFloat(v) || 0)
+                                );
+                              }}
+                              className="w-full text-xs font-bold font-mono px-2 py-1.5 rounded-lg border-2 border-[#141414] focus:border-[#ff4d1c] focus:outline-none bg-[#fffdf8]"
                             />
                           </div>
 
@@ -473,7 +543,7 @@ export function CollectionsManager({
                             <select
                               value={img.garmentType || 'tshirt'}
                               onChange={(e) => handleUpdateImageField(img.id, 'garmentType', e.target.value)}
-                              className="w-full text-xs px-1.5 py-1 rounded border border-[#ddd6c8] focus:border-[#141414] focus:outline-none bg-white"
+                              className="w-full text-xs px-2 py-1.5 rounded-lg border border-[#ddd6c8] focus:border-[#141414] focus:outline-none bg-white cursor-pointer"
                             >
                               <option value="tshirt">T-Shirt</option>
                               <option value="hoodie">Hoodie</option>
@@ -640,15 +710,39 @@ export function CollectionsManager({
                     </div>
                   )}
 
+                  {/* Price info */}
+                  {(() => {
+                    const prices = (c.images || [])
+                      .map((img) => img.price)
+                      .filter((p): p is number => typeof p === 'number' && p > 0);
+                    const min = prices.length > 0 ? Math.min(...prices) : 45;
+                    const max = prices.length > 0 ? Math.max(...prices) : 45;
+                    return (
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-[#141414] bg-[#ebe6dc]/40 px-3 py-1.5 rounded-xl border border-[#ddd6c8]">
+                        <Tag className="w-3.5 h-3.5 text-[#ff4d1c]" />
+                        <span>
+                          {prices.length > 0
+                            ? min === max
+                              ? `${min} ${currency}`
+                              : `${min} - ${max} ${currency}`
+                            : `45 ${currency}`}
+                        </span>
+                        <span className="text-[10px] text-[#6b665d] font-normal">
+                          · {c.images?.length || 0} pieces
+                        </span>
+                      </div>
+                    );
+                  })()}
+
                   {/* Actions */}
                   <div className="pt-3 border-t border-[#ddd6c8] flex items-center justify-between">
                     <button
                       type="button"
                       onClick={() => startEdit(c)}
-                      className="px-3.5 py-1.5 rounded-full border border-[#141414] hover:bg-[#141414] hover:text-[#f4f1ea] text-xs font-bold flex items-center gap-1.5 transition-colors"
+                      className="px-3.5 py-1.5 rounded-full bg-[#141414] text-[#f4f1ea] hover:bg-[#ff4d1c] text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
-                      <span>Manage & Photos</span>
+                      <span>Edit Prices & Pieces</span>
                     </button>
 
                     {confirmDeleteId === c.id ? (

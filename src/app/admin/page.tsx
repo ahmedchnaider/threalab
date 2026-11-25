@@ -295,6 +295,7 @@ export default function AdminPage() {
         {activeTab === 'collections' && (
           <CollectionsManager
             collections={collections}
+            currency={settings.currency}
             onSave={saveCollection}
             onDelete={deleteCollection}
           />
