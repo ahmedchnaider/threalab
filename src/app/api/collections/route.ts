@@ -40,6 +40,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Collection name is required' }, { status: 400 });
     }
 
+    // Available garment sizes for all products in the collection
+    const collectionSizes =
+      Array.isArray(collectionData.sizes) && collectionData.sizes.length > 0
+        ? collectionData.sizes
+        : ['S', 'M', 'L', 'XL', 'XXL'];
+
     // Process and upload any base64 images in the collection
     const processedImages: CollectionImage[] = [];
     const rawImages = Array.isArray(collectionData.images) ? collectionData.images : [];
@@ -61,7 +67,7 @@ export async function POST(request: NextRequest) {
         price: typeof img.price === 'number' ? img.price : 45,
         garmentType: img.garmentType || 'tshirt',
         color: img.color || 'Onyx Black',
-        sizes: Array.isArray(img.sizes) && img.sizes.length > 0 ? img.sizes : ['S', 'M', 'L', 'XL', 'XXL'],
+        sizes: Array.isArray(img.sizes) && img.sizes.length > 0 ? img.sizes : collectionSizes,
         order: img.order !== undefined ? img.order : i,
       });
     }
@@ -80,6 +86,7 @@ export async function POST(request: NextRequest) {
       description: (collectionData.description || '').trim(),
       coverImage: coverImage || '',
       price: typeof collectionData.price === 'number' && !isNaN(collectionData.price) ? collectionData.price : 45,
+      sizes: collectionSizes,
       images: processedImages,
       active: collectionData.active !== undefined ? Boolean(collectionData.active) : true,
       order: typeof collectionData.order === 'number' ? collectionData.order : 0,

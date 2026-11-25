@@ -21,6 +21,9 @@ import {
   Tag,
 } from 'lucide-react';
 
+const ALL_GARMENT_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL'];
+const DEFAULT_SIZES = ['S', 'M', 'L', 'XL', 'XXL'];
+
 interface CollectionsManagerProps {
   collections: Collection[];
   currency?: string;
@@ -44,6 +47,7 @@ export function CollectionsManager({
   const [formDescription, setFormDescription] = useState('');
   const [formActive, setFormActive] = useState(true);
   const [formPrice, setFormPrice] = useState<number | ''>(55);
+  const [formSizes, setFormSizes] = useState<string[]>(DEFAULT_SIZES);
   const [formImages, setFormImages] = useState<CollectionImage[]>([]);
   const [formCoverImage, setFormCoverImage] = useState<string>('');
 
@@ -59,6 +63,7 @@ export function CollectionsManager({
     setFormDescription('');
     setFormActive(true);
     setFormPrice(55);
+    setFormSizes(DEFAULT_SIZES);
     setFormImages([]);
     setFormCoverImage('');
   };
@@ -70,14 +75,22 @@ export function CollectionsManager({
     setFormDescription(c.description || '');
     setFormActive(c.active);
     const initialPrice = typeof c.price === 'number' ? c.price : (c.images?.[0]?.price || 55);
+    const initialSizes =
+      Array.isArray(c.sizes) && c.sizes.length > 0
+        ? c.sizes
+        : c.images?.[0]?.sizes && c.images[0].sizes.length > 0
+        ? c.images[0].sizes
+        : DEFAULT_SIZES;
+
     setFormPrice(initialPrice);
+    setFormSizes(initialSizes);
     setFormImages(
       (c.images || []).map((img, i) => ({
         ...img,
         title: img.title || img.caption || `Piece #${i + 1}`,
         price: typeof img.price === 'number' && !isNaN(img.price) ? img.price : initialPrice,
         garmentType: img.garmentType || 'tshirt',
-        sizes: img.sizes || ['S', 'M', 'L', 'XL', 'XXL'],
+        sizes: img.sizes && img.sizes.length > 0 ? img.sizes : initialSizes,
       }))
     );
     setFormCoverImage(c.coverImage || (c.images?.[0]?.url || ''));
@@ -89,6 +102,7 @@ export function CollectionsManager({
     setFormName('');
     setFormDescription('');
     setFormPrice(55);
+    setFormSizes(DEFAULT_SIZES);
     setFormImages([]);
     setFormCoverImage('');
   };
@@ -98,6 +112,30 @@ export function CollectionsManager({
     if (typeof val === 'number' && val >= 0) {
       setFormImages((prev) => prev.map((img) => ({ ...img, price: val })));
     }
+  };
+
+  const handleToggleSize = (sizeToToggle: string) => {
+    let updatedSizes: string[];
+    if (formSizes.includes(sizeToToggle)) {
+      if (formSizes.length <= 1) {
+        toast('At least one size must remain selected');
+        return;
+      }
+      updatedSizes = formSizes.filter((s) => s !== sizeToToggle);
+    } else {
+      updatedSizes = ALL_GARMENT_SIZES.filter(
+        (s) => formSizes.includes(s) || s === sizeToToggle
+      );
+    }
+    setFormSizes(updatedSizes);
+    setFormImages((prev) => prev.map((img) => ({ ...img, sizes: updatedSizes })));
+    toast(`Sizes updated for all products: ${updatedSizes.join(', ')}`);
+  };
+
+  const handleSetPresetSizes = (preset: string[]) => {
+    setFormSizes(preset);
+    setFormImages((prev) => prev.map((img) => ({ ...img, sizes: preset })));
+    toast(`Sizes set to: ${preset.join(', ')}`);
   };
 
   // Process uploaded files and add to current collection images
@@ -149,6 +187,7 @@ export function CollectionsManager({
       }
 
       const defaultItemPrice = typeof formPrice === 'number' && formPrice >= 0 ? formPrice : 55;
+      const baseSizes = formSizes.length > 0 ? formSizes : DEFAULT_SIZES;
       const item: CollectionImage = {
         id: newId(),
         url: finalUrl,
@@ -156,7 +195,7 @@ export function CollectionsManager({
         caption: '',
         price: defaultItemPrice,
         garmentType: 'tshirt',
-        sizes: ['S', 'M', 'L', 'XL', 'XXL'],
+        sizes: baseSizes,
         order: formImages.length + newItems.length,
       };
       newItems.push(item);
@@ -221,6 +260,7 @@ export function CollectionsManager({
     setIsSaving(true);
     try {
       const baseCollectionPrice = typeof formPrice === 'number' && formPrice >= 0 ? formPrice : 55;
+      const baseSizes = formSizes.length > 0 ? formSizes : DEFAULT_SIZES;
       const cleanedImages: CollectionImage[] = formImages.map((img, i) => {
         const rawPrice = Number(img.price);
         const validPrice = typeof rawPrice === 'number' && !isNaN(rawPrice) && rawPrice >= 0 ? rawPrice : baseCollectionPrice;
@@ -229,7 +269,7 @@ export function CollectionsManager({
           title: (img.title || img.caption || `Piece #${i + 1}`).trim(),
           price: validPrice,
           garmentType: img.garmentType || 'tshirt',
-          sizes: img.sizes && img.sizes.length > 0 ? img.sizes : ['S', 'M', 'L', 'XL', 'XXL'],
+          sizes: img.sizes && img.sizes.length > 0 ? img.sizes : baseSizes,
           order: i,
         };
       });
@@ -240,6 +280,7 @@ export function CollectionsManager({
         description: formDescription.trim(),
         coverImage: formCoverImage || (cleanedImages[0]?.url || ''),
         price: baseCollectionPrice,
+        sizes: baseSizes,
         images: cleanedImages,
         active: formActive,
         order: editingCollection ? editingCollection.order : collections.length,
@@ -385,6 +426,79 @@ export function CollectionsManager({
               </label>
             </div>
 
+            {/* Available Sizes for All Products */}
+            <div className="md:col-span-12 bg-[#ebe6dc]/40 border-2 border-[#141414] p-4 sm:p-5 rounded-2xl space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <label className="text-xs font-bold text-[#141414] uppercase tracking-wider flex items-center gap-1.5">
+                    <Check className="w-4 h-4 text-[#ff4d1c]" />
+                    <span>Available Sizes for All Products in Collection *</span>
+                  </label>
+                  <p className="text-[11px] text-[#6b665d] mt-0.5">
+                    Select the garment sizes customers can purchase for all pieces in this collection.
+                  </p>
+                </div>
+
+                {/* Quick Presets */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] uppercase font-bold text-[#6b665d] mr-1">Presets:</span>
+                  <button
+                    type="button"
+                    onClick={() => handleSetPresetSizes(['S', 'M', 'L', 'XL', 'XXL'])}
+                    className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-white hover:bg-[#141414] hover:text-white border border-[#141414] transition-colors shadow-xs"
+                  >
+                    Standard (S-XXL)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSetPresetSizes(ALL_GARMENT_SIZES)}
+                    className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-white hover:bg-[#141414] hover:text-white border border-[#141414] transition-colors shadow-xs"
+                  >
+                    All (XS-3XL)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSetPresetSizes(['L', 'XL', 'XXL', '3XL'])}
+                    className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-white hover:bg-[#141414] hover:text-white border border-[#141414] transition-colors shadow-xs"
+                  >
+                    Plus (L-3XL)
+                  </button>
+                </div>
+              </div>
+
+              {/* Size Buttons */}
+              <div className="flex items-center gap-2 flex-wrap pt-1">
+                {ALL_GARMENT_SIZES.map((sz: string) => {
+                  const isSelected = formSizes.includes(sz);
+                  return (
+                    <button
+                      key={sz}
+                      type="button"
+                      onClick={() => handleToggleSize(sz)}
+                      className={`min-w-[50px] h-10 px-3 rounded-xl text-xs font-bold font-mono border-2 flex items-center justify-center gap-1.5 transition-all select-none ${
+                        isSelected
+                          ? 'bg-[#141414] text-[#f4f1ea] border-[#141414] shadow-sm ring-2 ring-[#ff4d1c]/40'
+                          : 'bg-white text-[#6b665d] border-[#ddd6c8] hover:border-[#141414] hover:text-[#141414]'
+                      }`}
+                    >
+                      {isSelected ? (
+                        <Check className="w-3.5 h-3.5 text-[#ff4d1c]" />
+                      ) : (
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#ddd6c8]" />
+                      )}
+                      <span>{sz}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="text-[11px] text-[#6b665d] flex items-center gap-2 pt-1 border-t border-[#ddd6c8]/60">
+                <span className="font-bold text-[#141414]">Currently chosen:</span>
+                <span className="font-mono text-[#ff4d1c] font-bold">{formSizes.join(', ')}</span>
+                <span>({formSizes.length} sizes active)</span>
+              </div>
+            </div>
+
             <div className="md:col-span-12">
               <label className="block text-xs font-bold text-[#141414] uppercase tracking-wider mb-1.5">
                 Description / Story (optional)
@@ -493,11 +607,10 @@ export function CollectionsManager({
                   return (
                     <div
                       key={img.id || idx}
-                      className={`group relative bg-white border rounded-xl overflow-hidden shadow-sm transition-all flex flex-col ${
-                        isCover
-                          ? 'border-[#ff4d1c] ring-2 ring-[#ff4d1c]/30'
-                          : 'border-[#ddd6c8] hover:border-[#141414]'
-                      }`}
+                      className={`group relative bg-white border rounded-xl overflow-hidden shadow-sm transition-all flex flex-col ${isCover
+                        ? 'border-[#ff4d1c] ring-2 ring-[#ff4d1c]/30'
+                        : 'border-[#ddd6c8] hover:border-[#141414]'
+                        }`}
                     >
                       {/* Image Thumbnail Container */}
                       <div className="relative aspect-square bg-[#f4f1ea] overflow-hidden">
@@ -593,6 +706,13 @@ export function CollectionsManager({
                           </div>
                         </div>
 
+                        <div className="flex items-center justify-between text-[10px] text-[#6b665d] pt-1 border-t border-[#f4f1ea]">
+                          <span className="font-bold text-[#141414]">Sizes:</span>
+                          <span className="font-mono text-[#ff4d1c] font-bold truncate max-w-[110px]" title={(img.sizes && img.sizes.length > 0 ? img.sizes : formSizes).join(', ')}>
+                            {(img.sizes && img.sizes.length > 0 ? img.sizes : formSizes).join(', ')}
+                          </span>
+                        </div>
+
                         <div className="flex justify-between items-center text-[10px] text-[#6b665d] pt-1 border-t border-[#f4f1ea]">
                           <span>Look #{idx + 1}</span>
                           <button
@@ -686,11 +806,10 @@ export function CollectionsManager({
                     <button
                       type="button"
                       onClick={() => handleToggleActive(c)}
-                      className={`text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 shadow backdrop-blur-sm transition-colors ${
-                        c.active
-                          ? 'bg-[#141414] text-[#f4f1ea] hover:bg-[#ff4d1c]'
-                          : 'bg-white/90 text-[#6b665d] hover:bg-white'
-                      }`}
+                      className={`text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 shadow backdrop-blur-sm transition-colors ${c.active
+                        ? 'bg-[#141414] text-[#f4f1ea] hover:bg-[#ff4d1c]'
+                        : 'bg-white/90 text-[#6b665d] hover:bg-white'
+                        }`}
                       title={c.active ? 'Click to hide from shop' : 'Click to show in shop'}
                     >
                       {c.active ? (
@@ -770,6 +889,31 @@ export function CollectionsManager({
                         <span className="text-[10px] text-[#6b665d] font-normal">
                           · {c.images?.length || 0} pieces
                         </span>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Sizes info */}
+                  {(() => {
+                    const colSizes: string[] =
+                      Array.isArray(c.sizes) && c.sizes.length > 0
+                        ? c.sizes
+                        : c.images?.[0]?.sizes && c.images[0].sizes.length > 0
+                        ? c.images[0].sizes
+                        : DEFAULT_SIZES;
+                    return (
+                      <div className="flex items-center gap-2 text-xs text-[#6b665d]">
+                        <span className="font-bold text-[#141414]">Sizes:</span>
+                        <div className="flex gap-1 flex-wrap">
+                          {colSizes.map((sz: string) => (
+                            <span
+                              key={sz}
+                              className="px-1.5 py-0.5 rounded bg-[#ebe6dc] text-[10px] font-bold font-mono text-[#141414] border border-[#ddd6c8]"
+                            >
+                              {sz}
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     );
                   })()}
