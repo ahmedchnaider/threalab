@@ -16,9 +16,6 @@ export default function ShopPage() {
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
 
-  // Selected collection tab for lookbook
-  const [selectedCollectionId, setSelectedCollectionId] = useState<string>('all');
-
   const activeProducts = products
     .filter((p) => p.active)
     .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
@@ -50,7 +47,7 @@ export default function ShopPage() {
   };
 
   // Collection photo zoom handler
-  const handleCollectionImageZoom = (collection: Collection, index: number) => {
+  const handleCollectionImageZoom = (collection: Collection, index = 0) => {
     const items: LightboxItem[] = collection.images.map((img, i) => ({
       src: img.url,
       label: img.caption || `${collection.name} - Look #${i + 1}`,
@@ -61,11 +58,6 @@ export default function ShopPage() {
     setLightboxTitle(collection.name);
     setLightboxOpen(true);
   };
-
-  const displayedCollections =
-    selectedCollectionId === 'all'
-      ? activeCollections
-      : activeCollections.filter((c) => c.id === selectedCollectionId);
 
   return (
     <div className="space-y-16">
@@ -102,9 +94,9 @@ export default function ShopPage() {
         </div>
       </section>
 
-      {/* Lookbook / Collections Showcase */}
+      {/* Lookbook / Collections Showcase - One Front Image per Collection */}
       {activeCollections.length > 0 && (
-        <section className="space-y-8">
+        <section className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pb-4 border-b border-[#ddd6c8]">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
@@ -117,104 +109,90 @@ export default function ShopPage() {
                 Collections ({activeCollections.length})
               </h2>
             </div>
-
-            {/* Collection Filter Tabs if multiple collections */}
-            {activeCollections.length > 1 && (
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
-                <button
-                  type="button"
-                  onClick={() => setSelectedCollectionId('all')}
-                  className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 ${
-                    selectedCollectionId === 'all'
-                      ? 'bg-[#141414] text-[#f4f1ea]'
-                      : 'bg-[#ebe6dc] text-[#141414] hover:bg-[#ddd6c8]'
-                  }`}
-                >
-                  All Releases
-                </button>
-                {activeCollections.map((col) => (
-                  <button
-                    key={col.id}
-                    type="button"
-                    onClick={() => setSelectedCollectionId(col.id)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 ${
-                      selectedCollectionId === col.id
-                        ? 'bg-[#141414] text-[#f4f1ea]'
-                        : 'bg-[#ebe6dc] text-[#141414] hover:bg-[#ddd6c8]'
-                    }`}
-                  >
-                    {col.name}
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
 
-          {/* Render Collections */}
-          <div className="space-y-12">
-            {displayedCollections.map((col) => (
-              <div
-                key={col.id}
-                className="bg-[#fffdf8] border-[1.5px] border-[#141414] rounded-3xl p-6 sm:p-8 space-y-6 shadow-sm"
-              >
-                {/* Collection Meta Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#ddd6c8]">
-                  <div>
-                    <h3 className="font-anton text-2xl sm:text-3xl uppercase tracking-wide text-[#141414]">
-                      {col.name}
-                    </h3>
-                    {col.description && (
-                      <p className="text-sm text-[#6b665d] mt-1 max-w-2xl leading-relaxed">
-                        {col.description}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 self-start sm:self-auto">
-                    <span className="text-xs font-bold font-mono px-3 py-1 rounded-full bg-[#ebe6dc] text-[#141414] flex items-center gap-1.5">
-                      <Layers className="w-3.5 h-3.5 text-[#ff4d1c]" />
-                      <span>{col.images.length} photos</span>
-                    </span>
-                  </div>
-                </div>
+          {/* Grid of collections, each showcased with one front image */}
+          <div
+            className={`grid gap-6 ${
+              activeCollections.length === 1
+                ? 'grid-cols-1'
+                : activeCollections.length === 2
+                ? 'grid-cols-1 md:grid-cols-2'
+                : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+            }`}
+          >
+            {activeCollections.map((col) => {
+              const frontImage = col.coverImage || col.images?.[0]?.url || '';
 
-                {/* Collection Image Gallery */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {col.images.map((img, idx) => (
-                    <div
-                      key={img.id || idx}
-                      onClick={() => handleCollectionImageZoom(col, idx)}
-                      className="group relative aspect-[3/4] rounded-2xl overflow-hidden bg-[#ebe6dc] border border-[#141414]/15 cursor-pointer shadow-sm hover:shadow-md transition-all"
-                    >
+              return (
+                <div
+                  key={col.id}
+                  onClick={() => handleCollectionImageZoom(col, 0)}
+                  className="group relative bg-[#fffdf8] border-[1.5px] border-[#141414] rounded-3xl overflow-hidden cursor-pointer shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col"
+                >
+                  {/* Single Front Image */}
+                  <div
+                    className={`relative w-full overflow-hidden bg-[#ebe6dc] ${
+                      activeCollections.length === 1
+                        ? 'aspect-[16/9] sm:aspect-[21/9]'
+                        : 'aspect-[4/5]'
+                    }`}
+                  >
+                    {frontImage ? (
                       <img
-                        src={img.url}
-                        alt={img.caption || `${col.name} photo ${idx + 1}`}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        src={frontImage}
+                        alt={col.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
                         loading="lazy"
                       />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-[#6b665d]">
+                        <span>No image</span>
+                      </div>
+                    )}
 
-                      {/* Hover Overlay */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-4 text-white">
-                        <div className="self-end">
-                          <span className="p-2 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white hover:bg-white hover:text-black transition-colors">
-                            <Maximize2 className="w-4 h-4" />
+                    {/* Gradient Overlay with Collection Info */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent flex flex-col justify-between p-6 sm:p-8 text-white">
+                      {/* Top Badges */}
+                      <div className="flex justify-between items-start">
+                        <span className="text-[11px] font-bold font-mono px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-white flex items-center gap-1.5 shadow">
+                          <Layers className="w-3 h-3 text-[#ff4d1c]" />
+                          <span>
+                            {col.images.length}{' '}
+                            {col.images.length === 1 ? 'photo' : 'photos'}
+                          </span>
+                        </span>
+
+                        <span className="w-9 h-9 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white group-hover:bg-[#ff4d1c] group-hover:text-white transition-colors shadow">
+                          <Maximize2 className="w-4 h-4" />
+                        </span>
+                      </div>
+
+                      {/* Bottom Title & Description */}
+                      <div className="space-y-2">
+                        <div className="inline-block">
+                          <span className="text-[10px] uppercase font-bold tracking-widest text-[#ff4d1c] bg-black/40 px-2 py-0.5 rounded">
+                            Collection
                           </span>
                         </div>
-                        <div className="space-y-1">
-                          {img.caption && (
-                            <p className="text-xs font-semibold line-clamp-2 text-[#f4f1ea]">
-                              {img.caption}
-                            </p>
-                          )}
-                          <span className="text-[10px] text-white/70 uppercase tracking-wider font-mono">
-                            Look {idx + 1} of {col.images.length}
-                          </span>
+                        <h3 className="font-anton text-2xl sm:text-3xl lg:text-4xl uppercase tracking-wide text-[#f4f1ea] drop-shadow-sm">
+                          {col.name}
+                        </h3>
+                        {col.description && (
+                          <p className="text-xs sm:text-sm text-[#f4f1ea]/80 line-clamp-2 max-w-xl leading-relaxed">
+                            {col.description}
+                          </p>
+                        )}
+                        <div className="pt-2 flex items-center gap-1.5 text-xs font-bold text-white group-hover:text-[#ff4d1c] transition-colors">
+                          <span>View Lookbook</span>
+                          <span className="group-hover:translate-x-1 transition-transform">→</span>
                         </div>
                       </div>
                     </div>
-                  ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
       )}
