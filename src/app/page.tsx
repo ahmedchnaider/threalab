@@ -94,7 +94,48 @@ export default function ShopPage() {
         </div>
       </section>
 
-      {/* Lookbook / Collections Showcase - One Front Image per Collection */}
+      {/* Blanks & Garments Catalog Grid */}
+      <section className="space-y-6">
+        <div className="flex justify-between items-baseline pb-2 border-b border-[#ddd6c8]">
+          <div>
+            <h2 className="font-anton text-2xl sm:text-3xl uppercase tracking-wide text-[#141414]">
+              Garments & Blanks ({activeProducts.length})
+            </h2>
+            <p className="text-xs text-[#6b665d]">
+              Choose a blank piece to customize in our Studio with your artwork and typography.
+            </p>
+          </div>
+        </div>
+
+        {isLoading ? (
+          <div className="border-[1.5px] border-dashed border-[#ddd6c8] rounded-2xl p-16 text-center text-[#6b665d]">
+            Loading the collection…
+          </div>
+        ) : activeProducts.length === 0 ? (
+          <div className="border-[1.5px] border-dashed border-[#ddd6c8] rounded-2xl p-16 text-center space-y-4 text-[#6b665d]">
+            <p>No products available yet.</p>
+            <Link
+              href="/admin"
+              className="inline-block bg-[#141414] text-[#f4f1ea] px-6 py-2.5 rounded-full text-xs font-bold"
+            >
+              Add your first product in Admin
+            </Link>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {activeProducts.map((p) => (
+              <ProductCard
+                key={p.id}
+                product={p}
+                currency={settings.currency}
+                onZoom={handleProductZoom}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Lookbook / Collections Showcase - Under Garments & Blanks */}
       {activeCollections.length > 0 && (
         <section className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pb-4 border-b border-[#ddd6c8]">
@@ -196,47 +237,6 @@ export default function ShopPage() {
           </div>
         </section>
       )}
-
-      {/* Blanks & Garments Catalog Grid */}
-      <section className="space-y-6">
-        <div className="flex justify-between items-baseline pb-2 border-b border-[#ddd6c8]">
-          <div>
-            <h2 className="font-anton text-2xl sm:text-3xl uppercase tracking-wide text-[#141414]">
-              Garments & Blanks ({activeProducts.length})
-            </h2>
-            <p className="text-xs text-[#6b665d]">
-              Choose a blank piece to customize in our Studio with your artwork and typography.
-            </p>
-          </div>
-        </div>
-
-        {isLoading ? (
-          <div className="border-[1.5px] border-dashed border-[#ddd6c8] rounded-2xl p-16 text-center text-[#6b665d]">
-            Loading the collection…
-          </div>
-        ) : activeProducts.length === 0 ? (
-          <div className="border-[1.5px] border-dashed border-[#ddd6c8] rounded-2xl p-16 text-center space-y-4 text-[#6b665d]">
-            <p>No products available yet.</p>
-            <Link
-              href="/admin"
-              className="inline-block bg-[#141414] text-[#f4f1ea] px-6 py-2.5 rounded-full text-xs font-bold"
-            >
-              Add your first product in Admin
-            </Link>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {activeProducts.map((p) => (
-              <ProductCard
-                key={p.id}
-                product={p}
-                currency={settings.currency}
-                onZoom={handleProductZoom}
-              />
-            ))}
-          </div>
-        )}
-      </section>
 
       {/* Fullscreen Lightbox Modal */}
       <Lightbox
